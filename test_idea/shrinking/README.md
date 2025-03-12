@@ -1,6 +1,11 @@
 # SHRINK IDEA
 
-After some testing, we got incredible results with over 95% IoU. However, if we check the [output](predictions.png), we can see the model can't predict the outline of the objects. That's mean with the output, its nearly impossible to identity seperate fragments!!!
+After some testing, we got incredible results with over 95% IoU.
+However, if we check the below output image:
+
+![output](predictions.png)
+
+We can see the model can't predict the outline of the objects. That's mean with the output, its nearly impossible to identity seperate fragments!!!
 
 For now, it's not a problem, but we need to fix it for phrase 2 I believe!
 
