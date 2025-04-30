@@ -1,0 +1,86 @@
+*, ::before, ::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-family: "Open Sans", ui-sans-serif, system-ui, Inter, Roboto, "Helvetica Neue", "Arial Nova", "Nimbus Sans", Arial, sans-serif;
+  line-height: 1.5;
+}
+
+:root {
+  --spacing-base: clamp(16px, 12.8px + 1vw, 24px);
+  --font-base: clamp(1rem, 0.8rem + 1vw, 1.5rem);
+
+  --font-m: var(--font-base);
+  --font-lg: calc(1.189 * var(--font-base));
+  --font-xl: calc(1.414 * var(--font-base));
+  --font-sm: calc(0.841 * var(--font-base));
+  --font-xs: calc(0.707 * var(--font-base));
+
+  --spacing-m: var(--spacing-base);
+  --spacing-lg: calc(1.5 * var(--spacing-base));
+  --spacing-xl: calc(2 * var(--spacing-base));
+  --spacing-sm: calc(0.75 * var(--spacing-base));
+  --spacing-xs: calc(0.5 * var(--spacing-base));
+
+  --body-width: 80rem;
+}
+
+.header-background {
+  padding: var(--spacing-sm);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+.header {
+  max-width: var(--body-width);
+  margin: 0 auto;
+}
+
+.title {
+  font-size: var(--font-lg);
+  margin: 0;
+}
+
+.container {
+  padding: 0 var(--spacing-sm); 
+}
+
+.main {
+  max-width: var(--body-width);
+  margin: var(--spacing-xl) auto var(--spacing-m) auto;
+  gap: var(--spacing-m);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+.canvas-container {
+  flex: 8;
+  width: 100%;
+  min-width: min(100%, 50rem);
+  overflow-y: auto;
+  margin: 0 auto;
+
+  &>label {
+    display: block;
+  }
+}
+
+#file-display {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: solid #eee 3px;
+  cursor: pointer;
+}
+
+.sidebar {
+  flex: 5;
+  min-width: min(100%, 20rem);
+}

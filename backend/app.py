@@ -1,106 +1,63 @@
-import os
-import io
-import logging
-import sys
+from contextlib import asynccontextmanager
+from io import BytesIO
+from os import environ as env
 import time
-from fastapi import FastAPI, File, UploadFile, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, UploadFile
+from fastapi.requests import Request
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
 from PIL import Image
-import traceback
-import numpy as np
-from model import ModelHandler
+import uvicorn
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('api.log')
-    ]
-)
-logger = logging.getLogger(__name__)
 
-# Create FastAPI app
-app = FastAPI(
-    title="Fragment Segmentation API",
-    description="API for instance segmentation of fragments using Mask R-CNN",
-    version="1.0.0",
-)
+def homepage() -> HTMLResponse:
+    with open("index.html", "r") as f:
+        html_file = f.read()
+        return HTMLResponse(html_file)
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
-)
 
-# Initialize model handler
-WEIGHT_PATH = "../weights/mask_rcnn_weight_0.pth"
-model_handler = None
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Defer model loading for faster startup
+    from model import ModelHandler
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize model when application starts"""
-    global model_handler
-    try:
-        # Create the ModelHandler instance
-        model_handler = ModelHandler(WEIGHT_PATH)
-        # Load the model
-        model_handler.load()
-        logger.info(f"Model initialized successfully from {WEIGHT_PATH}")
-    except Exception as e:
-        logger.error(f"Failed to initialize model: {str(e)}")
-        logger.error(traceback.format_exc())
+    WEIGHT_PATH = "../weights/mask_rcnn_weight_0.pth"
+    # Load the ML model
+    app.state.model_handler = ModelHandler(WEIGHT_PATH)
+    app.state.model_handler.load()
+    print(f"Model initialized successfully from {WEIGHT_PATH}")
+    yield
 
-@app.get("/health")
-async def health_check():
-    """Endpoint to check if the API is running"""
-    global model_handler
-    if model_handler and model_handler.initialized:
-        return {"status": "healthy", "model_loaded": True}
-    elif model_handler:
-        return {"status": "unhealthy", "error": "Model not loaded"}
-    else:
-        return {"status": "unhealthy", "error": "Model handler not initialized"}
 
-@app.post("/predict")
-async def predict(request: Request, file: UploadFile = File(...)):
+async def predict(req: Request, file: UploadFile):
     """Process an image and return segmentation predictions"""
-    global model_handler
-    
+
+    model_handler = req.app.state.model_handler
+        
     # Check if model is loaded
     if not model_handler or not model_handler.initialized:
-        raise HTTPException(
-            status_code=503, 
-            detail="Model not initialized. Please try again later."
+        return Response(
+            status_code=503,
+            content="Model not initialized. Please try again later",
         )
-    
-    # Log request info
-    client_ip = request.client.host
-    logger.info(f"Request received from {client_ip} for file {file.filename}")
-    
+        
     start_time = time.time()
-    
+        
     try:
         # Validate file type
         if file.content_type not in ["image/jpeg", "image/png"]:
-            logger.warning(f"Invalid file type: {file.content_type}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid file type: {file.content_type}. Only JPEG and PNG are supported."
+            return Response(
+                status_code=403,
+                content=f"Invalid file type: {file.content_type}. Only JPEG and PNG are supported."
             )
         
         # Read the image file
         contents = await file.read()
         if not contents:
-            raise HTTPException(
+            return Response(
                 status_code=400,
-                detail="Empty file received"
+                content=f"Empty file received"
             )
         
         # Process image
@@ -108,31 +65,72 @@ async def predict(request: Request, file: UploadFile = File(...)):
         
         # Convert predictions to desired output format
         result = model_handler.postprocess(predictions)
+        img = Image.fromarray(result)
         
         # Log processing time
         process_time = time.time() - start_time
-        logger.info(f"Processed {file.filename} in {process_time:.2f} seconds")
-        
-        # Return the response
-        return result
+
+        print(f"Processed {file.filename} in {process_time:.2f} seconds")
+
+        img_out = BytesIO()
+        img.save(img_out, format="PNG")
+        img_out.seek(0)
+
+        return StreamingResponse(img_out, media_type="image/png")
         
     except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(
+        return Response(
             status_code=500,
-            detail=f"Error processing image: {str(e)}"
+            content=f"Error processing image: {e}"
         )
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Handle all unhandled exceptions"""
-    logger.error(f"Unhandled exception: {str(exc)}")
-    logger.error(traceback.format_exc())
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "An unexpected error occurred"}
+
+async def health_check(req: Request):
+    """Endpoint to check if the API is running"""
+
+    model_handler = req.app.state.model_handler
+    if model_handler and model_handler.initialized:
+        return {"status": "healthy", "model_loaded": True}
+    elif model_handler:
+        return {"status": "unhealthy", "error": "Model not loaded"}
+    else:
+        return {"status": "unhealthy", "error": "Model handler not initialized"}
+
+
+def make_app(is_dev: bool) -> FastAPI:
+    app = FastAPI(lifespan=lifespan)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],    # Allows all origins
+        allow_credentials=True,
+        allow_methods=["*"],    # Allows all methods
+        allow_headers=["*"],    # Allows all headers
     )
 
+    if is_dev:
+        app.get("/")(homepage)
+    else:
+        # Cached response to avoid file i/o for every request
+        res = homepage()
+        app.get("/")(lambda: res)
+
+    app.get("/health")(health_check)
+
+    app.post("/predict")(predict)
+
+    app.mount("/assets", StaticFiles(directory="assets"), name="assets")
+    return app
+
+
+# TODO: Extract to configuration file
+dev = env.get("DEV") is not None
+port = int(env.get("PORT", default="3000"))
+
+app = make_app(dev)
+
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=False)
+    if dev:
+        uvicorn.run("app:app", host="127.0.0.1", port=port, reload=True)
+    else:
+        uvicorn.run(app, host="0.0.0.0", port=port)

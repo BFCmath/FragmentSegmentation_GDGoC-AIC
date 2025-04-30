@@ -24,7 +24,7 @@ Start the API server with:
 python app.py
 ```
 
-The server will be available at <http://localhost:8000>
+The server will be available at <http://localhost:3000>
 
 ## API Endpoints
 

@@ -62,13 +62,6 @@ def get_model():
     
     return model
 
-def remove_overlapping_pixels(mask, other_masks):
-    """Remove pixels that overlap with other masks"""
-    for other_mask in other_masks:
-        if np.sum(np.logical_and(mask, other_mask)) > 0:
-            mask[np.logical_and(mask, other_mask)] = 0
-    return mask
-
 class ModelHandler:
     def __init__(self, model_path):
         """Initialize the model handler with path to model weights"""
@@ -121,7 +114,7 @@ class ModelHandler:
         """Run inference on an image and return predictions"""
         if not self.initialized:
             raise RuntimeError("Model not initialized. Call load() first.")
-        
+
         try:
             # Preprocess the image
             img_tensor = self.preprocess(image_bytes)
@@ -137,22 +130,9 @@ class ModelHandler:
             
     def postprocess(self, predictions):
         """Process raw model predictions into final output format"""
-        result = {
-            'boxes': [],
-            'scores': [],
-            'labels': [],
-            'masks': []
-        }
+        masks = []
         
-        # Get image dimensions from the first mask
-        if len(predictions['masks']) > 0:
-            h, w = predictions['masks'][0].shape[1:]
-        else:
-            return result
-        
-        # Create a single combined mask for visualization
-        combined_mask = np.zeros((h, w), dtype=np.uint8)
-        previous_masks = []
+        previous_masks = None
         
         for i, mask_tensor in enumerate(predictions['masks']):
             score = predictions['scores'][i].cpu().item()
@@ -162,24 +142,14 @@ class ModelHandler:
                 
             # Convert mask tensor to numpy array
             mask_np = mask_tensor.cpu().numpy()[0]
-            binary_mask = (mask_np > Config.MASK_THRESHOLD).astype(np.uint8)
+            binary_mask = mask_np > Config.MASK_THRESHOLD
             
             # Remove overlapping pixels
-            binary_mask = remove_overlapping_pixels(binary_mask, previous_masks)
-            previous_masks.append(binary_mask)
-            
-            # Add to combined mask
-            combined_mask = np.logical_or(combined_mask, binary_mask).astype(np.uint8)
-            
-            # Get bounding box
-            box = predictions['boxes'][i].cpu().numpy()
-            label = predictions['labels'][i].cpu().item()
-            
-            # Add to result
-            result['boxes'].append(box.tolist())
-            result['scores'].append(score)
-            result['labels'].append(label)
-            result['masks'].append(binary_mask.tolist())  # Convert to list for JSON serialization
-        
-        result['combined_mask'] = combined_mask.tolist()  # Add combined mask
-        return result
+            if previous_masks is None:
+                previous_masks = binary_mask
+            else:
+                binary_mask[binary_mask & previous_masks] = 0
+                previous_masks |= binary_mask
+
+            masks.append(binary_mask)
+        return np.vstack(masks)
