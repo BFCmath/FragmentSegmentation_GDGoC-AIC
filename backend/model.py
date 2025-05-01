@@ -146,7 +146,7 @@ class ModelHandler:
             
             # Remove overlapping pixels
             if previous_masks is None:
-                previous_masks = binary_mask
+                previous_masks = binary_mask.copy()
             else:
                 binary_mask[binary_mask & previous_masks] = 0
                 previous_masks |= binary_mask
