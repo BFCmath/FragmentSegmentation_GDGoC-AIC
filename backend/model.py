@@ -20,12 +20,7 @@ class Config:
     MIN_SCORE = 0.59
     
     # Other settings
-    NORMALIZE = False
     DEVICE = torch.device('cpu')  # Using CPU as specified
-    
-    # ImageNet mean and std for normalization
-    RESNET_MEAN = (0.485, 0.456, 0.406)
-    RESNET_STD = (0.229, 0.224, 0.225)
 
     # Image dimensions
     WIDTH = 512
@@ -36,18 +31,11 @@ def get_model():
     # 2 classes: background (0) and fragment (1)
     NUM_CLASSES = 2
     
-    if Config.NORMALIZE:
-        model = torchvision.models.detection.maskrcnn_resnet50_fpn(
-            pretrained=False,  # We'll load trained weights
-            box_detections_per_img=Config.BOX_DETECTIONS_PER_IMG,
-            image_mean=Config.RESNET_MEAN, 
-            image_std=Config.RESNET_STD
-        )
-    else:
-        model = torchvision.models.detection.maskrcnn_resnet50_fpn(
-            pretrained=False,  # We'll load trained weights
-            box_detections_per_img=Config.BOX_DETECTIONS_PER_IMG
-        )
+    model = torchvision.models.detection.maskrcnn_resnet50_fpn(
+        weights=None,
+        weights_backbone=None,
+        box_detections_per_img=Config.BOX_DETECTIONS_PER_IMG
+    )
 
     # Get the number of input features for the classifier
     in_features = model.roi_heads.box_predictor.cls_score.in_features
@@ -66,25 +54,19 @@ class ModelHandler:
     def __init__(self, model_path):
         """Initialize the model handler with path to model weights"""
         self.model_path = model_path
-        self.model = None
         self.device = Config.DEVICE
-        self.initialized = False
         
-    def load(self):
-        """Load the model from disk"""
         try:
             if not os.path.exists(self.model_path):
                 raise FileNotFoundError(f"Model file not found: {self.model_path}")
             
             logger.info(f"Loading model from {self.model_path}")
             self.model = get_model()
-            self.model.load_state_dict(torch.load(self.model_path, map_location=self.device))
+            self.model.load_state_dict(torch.load(self.model_path, map_location=self.device, weights_only=True))
             self.model.to(self.device)
             self.model.eval()  # Set to evaluation mode
-            self.initialized = True
             logger.info("Model loaded successfully")
         except Exception as e:
-            self.initialized = False
             logger.error(f"Failed to load model: {str(e)}")
             raise
     
@@ -103,17 +85,11 @@ class ModelHandler:
             
         # Convert to tensor
         img_tensor = F.to_tensor(image)
-        
-        # Normalize if needed
-        if Config.NORMALIZE:
-            img_tensor = F.normalize(img_tensor, Config.RESNET_MEAN, Config.RESNET_STD)
             
         return img_tensor
     
     def predict(self, image_bytes):
         """Run inference on an image and return predictions"""
-        if not self.initialized:
-            raise RuntimeError("Model not initialized. Call load() first.")
 
         try:
             # Preprocess the image
@@ -142,7 +118,7 @@ class ModelHandler:
                 
             # Convert mask tensor to numpy array
             mask_np = mask_tensor.cpu().numpy()[0]
-            binary_mask = mask_np > Config.MASK_THRESHOLD
+            binary_mask = mask_np >= Config.MASK_THRESHOLD
             
             # Remove overlapping pixels
             if previous_masks is None:

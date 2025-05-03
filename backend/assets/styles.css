@@ -29,7 +29,7 @@ html {
   --spacing-sm: calc(0.75 * var(--spacing-base));
   --spacing-xs: calc(0.5 * var(--spacing-base));
 
-  --body-width: 80rem;
+  --body-width: 90rem;
 }
 
 .header-background {
@@ -51,7 +51,7 @@ html {
   padding: 0 var(--spacing-sm); 
 }
 
-.main {
+#main {
   max-width: var(--body-width);
   margin: var(--spacing-xl) auto var(--spacing-m) auto;
   gap: var(--spacing-m);
@@ -63,7 +63,7 @@ html {
 .canvas-container {
   flex: 8;
   width: 100%;
-  min-width: min(100%, 50rem);
+  min-width: min(100%, 24rem);
   overflow-y: auto;
   margin: 0 auto;
 
@@ -82,5 +82,5 @@ html {
 
 .sidebar {
   flex: 5;
-  min-width: min(100%, 20rem);
+  min-width: min(100%, 24rem);
 }

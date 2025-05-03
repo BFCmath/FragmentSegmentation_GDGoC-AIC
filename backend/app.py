@@ -25,7 +25,6 @@ async def lifespan(app: FastAPI):
     WEIGHT_PATH = "../weights/mask_rcnn_weight_0.pth"
     # Load the ML model
     app.state.model_handler = ModelHandler(WEIGHT_PATH)
-    app.state.model_handler.load()
     print(f"Model initialized successfully from {WEIGHT_PATH}")
     yield
 
@@ -36,7 +35,7 @@ async def predict(req: Request, file: UploadFile):
     model_handler = req.app.state.model_handler
         
     # Check if model is loaded
-    if not model_handler or not model_handler.initialized:
+    if not model_handler:
         return Response(
             status_code=503,
             content="Model not initialized. Please try again later",
@@ -85,18 +84,6 @@ async def predict(req: Request, file: UploadFile):
         )
 
 
-async def health_check(req: Request):
-    """Endpoint to check if the API is running"""
-
-    model_handler = req.app.state.model_handler
-    if model_handler and model_handler.initialized:
-        return {"status": "healthy", "model_loaded": True}
-    elif model_handler:
-        return {"status": "unhealthy", "error": "Model not loaded"}
-    else:
-        return {"status": "unhealthy", "error": "Model handler not initialized"}
-
-
 def make_app(is_dev: bool) -> FastAPI:
     app = FastAPI(lifespan=lifespan)
 
@@ -114,8 +101,6 @@ def make_app(is_dev: bool) -> FastAPI:
         # Cached response to avoid file i/o for every request
         res = homepage()
         app.get("/")(lambda: res)
-
-    app.get("/health")(health_check)
 
     app.post("/predict")(predict)
 
