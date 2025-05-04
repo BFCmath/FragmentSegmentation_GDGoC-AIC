@@ -1,17 +1,14 @@
+from io import BytesIO
 import os
-import torch
+
+from PIL import Image
 import numpy as np
+import torch
 import torchvision
-from torchvision.transforms import functional as F
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
-from PIL import Image
-import logging
-from io import BytesIO  # Add this import for handling binary data
+from torchvision.transforms import functional as F  # Add this import for handling binary data
 
-logging.basicConfig(level=logging.INFO, 
-                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 class Config:
     # Model parameters
@@ -25,6 +22,7 @@ class Config:
     # Image dimensions
     WIDTH = 512
     HEIGHT = 512
+
 
 def get_model():
     """Initialize and return the MaskR-CNN model"""
@@ -50,31 +48,32 @@ def get_model():
     
     return model
 
+
 class ModelHandler:
-    def __init__(self, model_path):
+    def __init__(self, model_path, logger):
         """Initialize the model handler with path to model weights"""
         self.model_path = model_path
         self.device = Config.DEVICE
         
         try:
             if not os.path.exists(self.model_path):
-                raise FileNotFoundError(f"Model file not found: {self.model_path}")
+                raise FileNotFoundError(f'Model file not found: {self.model_path}')
             
-            logger.info(f"Loading model from {self.model_path}")
+            logger.info(f'Loading model from {self.model_path}')
             self.model = get_model()
             self.model.load_state_dict(torch.load(self.model_path, map_location=self.device, weights_only=True))
             self.model.to(self.device)
             self.model.eval()  # Set to evaluation mode
-            logger.info("Model loaded successfully")
+            logger.info(f'Model loaded successfully from {model_path}')
         except Exception as e:
-            logger.error(f"Failed to load model: {str(e)}")
+            logger.error(f'Failed to load model: {str(e)}')
             raise
     
     def preprocess(self, image_bytes):
         """Preprocess image for model input"""
         if isinstance(image_bytes, bytes):
             # Convert bytes to PIL Image using BytesIO
-            image = Image.open(BytesIO(image_bytes)).convert("RGB")
+            image = Image.open(BytesIO(image_bytes)).convert('RGB')
         else:
             # Already a PIL Image
             image = image_bytes
@@ -87,23 +86,21 @@ class ModelHandler:
         img_tensor = F.to_tensor(image)
             
         return img_tensor
-    
+
+
     def predict(self, image_bytes):
         """Run inference on an image and return predictions"""
 
-        try:
-            # Preprocess the image
-            img_tensor = self.preprocess(image_bytes)
+        # Preprocess the image
+        img_tensor = self.preprocess(image_bytes)
+        
+        # Perform inference
+        with torch.no_grad():
+            predictions = self.model([img_tensor.to(self.device)])[0]
             
-            # Perform inference
-            with torch.no_grad():
-                predictions = self.model([img_tensor.to(self.device)])[0]
-                
-            return predictions
-        except Exception as e:
-            logger.error(f"Error during prediction: {str(e)}")
-            raise
+        return predictions
             
+
     def postprocess(self, predictions):
         """Process raw model predictions into final output format"""
         masks = []
