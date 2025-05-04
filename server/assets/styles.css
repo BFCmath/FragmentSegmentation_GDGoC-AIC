@@ -61,7 +61,7 @@ html {
 }
 
 .canvas-container {
-  flex: 8;
+  flex: 3;
   width: 100%;
   min-width: min(100%, 24rem);
   overflow-y: auto;
@@ -81,6 +81,6 @@ html {
 }
 
 .sidebar {
-  flex: 5;
+  flex: 2;
   min-width: min(100%, 24rem);
 }

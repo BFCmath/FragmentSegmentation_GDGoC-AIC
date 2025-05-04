@@ -41,6 +41,13 @@ function drawPrompt() {
   ctx.fillText("Paste image or click to upload", canvas.width / 2, canvas.height / 2)
 }
 
+function clearCdf() {
+  while (points.lastElementChild) {
+    points.removeChild(points.lastElementChild)
+  }
+  lines.removeAttribute("d")
+}
+
 class Oklab {
   /**
    * @param {number} value
@@ -125,7 +132,7 @@ function plotCdf(areas) {
   }
 
   while (points.childElementCount) {
-    points.removeChild(points.lastElementChild ?? assertNonNull())
+    throw new Error("CDF plot is not empty")
   }
 
   const yDec = 500 / areas.length
@@ -197,21 +204,19 @@ function displayMask(blob) {
     const count = (img.height / img.width) >>> 0
     const colors = randomColor(count)
 
-    const w = canvas.width
-    const h = canvas.height * count
-    offscreenCanvas.width = w
-    offscreenCanvas.height = h
-
-    offscreenCtx.drawImage(img, 0, 0, w, h)
-    const maskData = offscreenCtx.getImageData(0, 0, w, h)
+    offscreenCanvas.width = canvas.width
+    offscreenCanvas.height = canvas.height
 
     const imgdata = ctx.getImageData(0, 0, canvas.width, canvas.height)
     const datalen = imgdata.data.length
 
     const areas = new Float64Array(count)
 
-    let mask = maskData.data
+    let sy = 0
     for (let i = 0; i < count; ++i) {
+      offscreenCtx.drawImage(img, 0, sy, img.width, img.width, 0, 0, canvas.width, canvas.height)
+      const maskData = offscreenCtx.getImageData(0, 0, canvas.width, canvas.height)
+      const mask = maskData.data
       let pixelCount = 0
       const [r, g, b] = colors.subarray(i * 3, (i + 1) * 3)
       for (let idx = 0; idx < datalen; idx += 4) {
@@ -226,8 +231,8 @@ function displayMask(blob) {
         }
       }
 
-      mask = mask.subarray(datalen)
       areas[i] = 4/3 * Math.pow(pixelCount / Math.PI, 3/2)
+      sy += img.width
     }
 
     plotCdf(areas)
@@ -245,6 +250,8 @@ function displayMask(blob) {
  * Process the image file when the user uploaded or pasted
  */
 function processFile(file) {
+  clearCdf()
+
   // Convert to HTMLImageElement and send to canvas
   const reader = new FileReader()
   reader.addEventListener("load", () => {
@@ -309,10 +316,7 @@ document.addEventListener("paste", e => {
 const form = assertClass(HTMLFormElement, document.querySelector("#main"))
 form.addEventListener("submit", e => e.preventDefault())
 form.addEventListener("reset", () => {
-  while (points.lastElementChild) {
-    points.removeChild(points.lastElementChild)
-  }
-  lines.removeAttribute("d")
+  clearCdf()
   drawPrompt()
 })
 
