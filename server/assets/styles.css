@@ -76,11 +76,34 @@ html {
   display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
-  border: solid #eee 3px;
+  border: solid #000 2px;
   cursor: pointer;
 }
 
 .sidebar {
   flex: 2;
   min-width: min(100%, 24rem);
+}
+
+.btn-panel {
+  display: flex;
+  gap: var(--spacing-m);
+}
+
+.btn {
+  font-size: var(--font-sm);
+  padding: 0.5em 1em;
+  background: #59b6ec;
+  border: none;
+  border-radius: 0.25em;
+  cursor: pointer;
+  transition: background 200ms linear;
+
+  &:not([data-disabled]):hover {
+    background: #2b8dc1;
+  }
+
+  &[data-disabled] {
+    color: #5d5d5d;
+  }
 }

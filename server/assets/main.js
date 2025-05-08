@@ -25,6 +25,36 @@ function assertClass(cls, instance) {
 const canvas = assertClass(HTMLCanvasElement, document.querySelector("#file-display"))
 const ctx = canvas.getContext("2d", { willReadFrequently: true }) ?? assertNonNull()
 
+const offscreenCanvas = new OffscreenCanvas(canvas.width, canvas.height)
+const offscreenCtx = offscreenCanvas.getContext("2d", { willReadFrequently: true }) ?? assertNonNull()
+
+const vticks = document.querySelector("#cdf-vticks") ?? assertNonNull()
+const lines = document.querySelector("#cdf-lines") ?? assertNonNull()
+const points = document.querySelector("#cdf-points") ?? assertNonNull()
+
+const downloadBtn = document.querySelector("#download-btn") ?? assertNonNull()
+
+const quantileElems = [
+  {
+    y: 500,
+    prefix: "q10",
+    line: document.querySelector("#q10-line") ?? assertNonNull(),
+    text: document.querySelector("#q10-text") ?? assertNonNull(),
+  },
+  {
+    y: 300,
+    prefix: "q50",
+    line: document.querySelector("#q50-line") ?? assertNonNull(),
+    text: document.querySelector("#q50-text") ?? assertNonNull(),
+  },
+  {
+    y: 100,
+    prefix: "q90",
+    line: document.querySelector("#q90-line") ?? assertNonNull(),
+    text: document.querySelector("#q90-text") ?? assertNonNull(),
+  },
+]
+
 // Draw the initial prompt
 function drawPrompt() {
   const w = 1024
@@ -45,7 +75,16 @@ function clearCdf() {
   while (points.lastElementChild) {
     points.removeChild(points.lastElementChild)
   }
+
   lines.removeAttribute("d")
+
+  for (const elem of quantileElems) {
+    elem.text.textContent = ""
+    elem.line.removeAttribute("x1")
+    elem.line.removeAttribute("y1")
+    elem.line.removeAttribute("x2")
+    elem.line.removeAttribute("y1")
+  }
 }
 
 class Oklab {
@@ -106,21 +145,14 @@ function randomColor(count) {
   return result
 }
 
-const offscreenCanvas = new OffscreenCanvas(canvas.width, canvas.height)
-const offscreenCtx = offscreenCanvas.getContext("2d", { willReadFrequently: true }) ?? assertNonNull()
-
-const vticks = document.querySelector("#cdf-vticks") ?? assertNonNull()
-const lines = document.querySelector("#cdf-lines") ?? assertNonNull()
-const points = document.querySelector("#cdf-points") ?? assertNonNull()
-
 /**
- * @param {Float64Array} areas
+ * @param {Float64Array} volumes
  */
-function plotCdf(areas) {
-  areas.sort()
+function plotCdf(volumes) {
+  volumes.sort()
 
-  const min = areas[0]
-  const max = areas[areas.length - 1]
+  const min = volumes[0]
+  const max = volumes[volumes.length - 1]
 
   // Draw number on horizontal ticks
   const children = vticks.children
@@ -135,14 +167,16 @@ function plotCdf(areas) {
     throw new Error("CDF plot is not empty")
   }
 
-  const yDec = 500 / areas.length
+  const yDec = 500 / volumes.length
   let y = 550
 
   // Compute the points of the CDF plot
-  const xs = new Float64Array(areas.length + 2)
-  const ys = new Float64Array(areas.length + 2)
+  const xs = new Float64Array(volumes.length + 2)
+  const ys = new Float64Array(volumes.length + 2)
   let idx = 1
-  for (const area of areas) {
+
+  let q_idx = 0
+  for (const area of volumes) {
     y -= yDec
     const x = (area - min) * 600 / (max - min) + 100
     if (idx > 0 && x == xs[idx - 1]) {
@@ -152,15 +186,28 @@ function plotCdf(areas) {
       ys[idx] = y
       idx += 1
     }
+
+    if (q_idx < quantileElems.length && y < quantileElems[q_idx].y) {
+      const { line, text, prefix } = quantileElems[q_idx]
+      line.setAttribute("x1", x.toString())
+      line.setAttribute("x2", x.toString())
+      line.setAttribute("y1", y.toString())
+      line.setAttribute("y2", "550")
+
+      text.textContent = `${prefix} = ${area.toFixed(2)}`
+      text.setAttribute("x", (x + 10).toString())
+      text.setAttribute("transform", `rotate(-90 ${x + 10} 540)`)
+      ++q_idx
+    }
   }
 
   // Draw the points
-  for (let i = 0; i < idx; ++i) {
+  for (let i = 1; i < idx; ++i) {
     // TODO: Fill each point with their respective color
     const elem = document.createElementNS("http://www.w3.org/2000/svg", "circle")
-    elem.setAttribute("cx", xs[i + 1].toString())
-    elem.setAttribute("cy", ys[i + 1].toString())
-    elem.setAttribute("r", "5")
+    elem.setAttribute("cx", xs[i].toString())
+    elem.setAttribute("cy", ys[i].toString())
+    elem.setAttribute("r", "3")
     points.appendChild(elem)
   }
 
@@ -210,7 +257,7 @@ function displayMask(blob) {
     const imgdata = ctx.getImageData(0, 0, canvas.width, canvas.height)
     const datalen = imgdata.data.length
 
-    const areas = new Float64Array(count)
+    const volumes = new Float64Array(count)
 
     let sy = 0
     for (let i = 0; i < count; ++i) {
@@ -231,13 +278,15 @@ function displayMask(blob) {
         }
       }
 
-      areas[i] = 4/3 * Math.pow(pixelCount / Math.PI, 3/2)
+
+      // areas[i] = Math.sqrt(pixelCount / Math.PI)
+      volumes[i] = 4/3 * Math.pow(pixelCount / Math.PI, 3/2)
       sy += img.width
     }
 
-    plotCdf(areas)
-
+    plotCdf(volumes)
     ctx.putImageData(imgdata, 0, 0)
+    downloadBtn.removeAttribute("data-disabled")
 
     URL.revokeObjectURL(src)
   })
@@ -313,11 +362,14 @@ document.addEventListener("paste", e => {
   }
 })
 
-const form = assertClass(HTMLFormElement, document.querySelector("#main"))
-form.addEventListener("submit", e => e.preventDefault())
-form.addEventListener("reset", () => {
+function reset() {
   clearCdf()
   drawPrompt()
-})
+  downloadBtn.setAttribute("data-disabled", "disabled")
+}
 
-drawPrompt()
+const form = assertClass(HTMLFormElement, document.querySelector("#main"))
+form.addEventListener("submit", e => e.preventDefault())
+form.addEventListener("reset", reset)
+
+reset()

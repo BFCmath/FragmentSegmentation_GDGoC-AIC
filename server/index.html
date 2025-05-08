@@ -63,9 +63,19 @@
               </g>
 
               <g stroke="#59b6ec" stroke-width="2" stroke-dasharray="10,5">
-                <line x1="100" y1="100" x2="700" y2="100"></line>
-                <line x1="100" y1="300" x2="700" y2="300"></line>
-                <line x1="100" y1="500" x2="700" y2="500"></line>
+                <line x1="100" y1="100" x2="750" y2="100"></line>
+                <line x1="100" y1="300" x2="750" y2="300"></line>
+                <line x1="100" y1="500" x2="750" y2="500"></line>
+
+                <line id="q90-line"></line>
+                <line id="q50-line"></line>
+                <line id="q10-line"></line>
+              </g>
+
+              <g fill="#59b6ec" dominant-baseline="hanging">
+                <text id="q10-text" x="300" y="540"></text>
+                <text id="q50-text" x="200" y="540"></text>
+                <text id="q90-text" x="100" y="540"></text>
               </g>
 
               <path id="cdf-lines" fill="none" stroke="#000" stroke-width="3"/>
@@ -83,7 +93,8 @@
             </svg>
           </div>
           <div class="btn-panel">
-            <input type="reset" value="Clear">
+            <input class="btn" type="reset" value="Clear">
+            <label class="btn" id="download-btn">Download</label>
           </div>
         </div>
       </form>
