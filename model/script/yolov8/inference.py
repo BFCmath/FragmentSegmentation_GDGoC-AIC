@@ -21,17 +21,22 @@ class Config:
         
         # Inference settings
         self.conf_threshold = 0.25  # Confidence threshold
-        self.iou_threshold = 0.7    # IoU threshold for NMS
+        self.iou_threshold = 0.7   # IoU threshold for NMS
         self.device = 'cpu'         # Force CPU usage
         
-        # Single image source and output path
-        self.image_path = '/kaggle/input/fst-depth-map/vits/001_depth.png'  # Path to single test image
-        self.output_path = '/kaggle/working/pred'  # Path to save predictions
+        # --- Settings for Separate Inference Runs Timing ---
+        self.image_dir_path = '/kaggle/input/fst-depth-map/vits/' 
+        self.num_separate_runs_for_timing = 50 # Number of separate inference runs on different images
+
+        # --- Output Settings for the Single Visualized Example ---
+        self.output_path_base = '/kaggle/working/inference_eval_outputs' 
         
-        # Visualization settings
+        # Inference/Visualization settings for YOLO predict calls
         self.imgsz = 512            # Same size used during training
-        self.hide_labels = True     # Hide labels
-        self.hide_conf = True       # Hide confidences
+        # Updated based on deprecation warnings:
+        self.show_labels = False    # Set to True to show labels (previously hide_labels=True)
+        self.show_conf = False      # Set to True to show confidences (previously hide_conf=True)
+        self.show_boxes = False     # Set to True to show bounding boxes (previously boxes=False for predict)
         
         # Class information
         self.classes = ['fragment']  # Single class: fragment
@@ -46,141 +51,252 @@ def load_model(config):
         print(f"Error loading model: {e}")
         return None
 
-def run_single_inference(model, config):
-    """Run inference on a single image"""
-    if not model:
-        print("No model loaded. Cannot run inference.")
-        return None
-    
-    # Ensure image path exists
-    if not os.path.exists(config.image_path):
-        print(f"Image not found at {config.image_path}")
-        return None
-    
-    # Create output directory if it doesn't exist
-    os.makedirs(config.output_path, exist_ok=True)
-    
-    # Run prediction with the model and time it
-    print(f"Running inference on {config.image_path}")
-    
-    # Start timing
-    start_time = time.time()
-    
-    results = model.predict(
-        source=config.image_path,
-        conf=config.conf_threshold,
-        iou=config.iou_threshold,
-        imgsz=config.imgsz,
-        device=config.device,
-        save=True,
-        save_txt=False,  # No need to save text for single image
-        project=config.output_path,
-        name='predict',
-        visualize=False,  # We'll do our own visualization
-        hide_labels=True,
-        hide_conf=True,
-        boxes=False,      # No bounding boxes
-        retina_masks=True # High-quality segmentation masks
-    )
-    
-    # End timing
-    end_time = time.time()
-    inference_time = end_time - start_time
-    print(f"Inference completed in {inference_time:.4f} seconds")
-    
-    return results[0], inference_time  # Return only the first result and time
+def get_random_image_paths(image_dir_str, num_images, extensions=('.png', '.jpg', '.jpeg', '.bmp', '.tiff')):
+    """Gets a list of random image paths from a directory."""
+    image_dir = Path(image_dir_str)
+    if not image_dir.is_dir():
+        print(f"Error: Provided image path '{image_dir_str}' is not a directory.")
+        return []
 
-def visualize_single_result(result, img_path, inference_time, output_path):
-    """Visualize single image prediction with side-by-side comparison"""
+    all_image_files = []
+    for ext in extensions:
+        all_image_files.extend(list(image_dir.rglob(f'*{ext}')))
+    
+    all_image_files = [str(p) for p in all_image_files] 
+
+    if not all_image_files:
+        print(f"No images found in '{image_dir_str}' with extensions {extensions}")
+        return []
+
+    if len(all_image_files) < num_images:
+        print(f"Warning: Requested {num_images} images, but only found {len(all_image_files)}. Using all {len(all_image_files)} found images.")
+        if not all_image_files: return []
+        return random.choices(all_image_files, k=num_images)
+    else:
+        return random.sample(all_image_files, num_images)
+
+
+def evaluate_separate_inference_runs(model, image_paths, config):
+    """Runs a separate model.predict() call for each image and collects timing."""
+    if not model:
+        print("No model loaded. Cannot run inference for timing evaluation.")
+        return None
+
+    inference_times = []
+    
+    print(f"\nEvaluating inference time with {len(image_paths)} separate runs...")
+    
+    if image_paths:
+        print("Performing a warm-up inference run...")
+        valid_warmup_path = next((p for p in image_paths if os.path.exists(p)), None)
+        if valid_warmup_path:
+            try:
+                _ = model.predict(
+                    source=valid_warmup_path,
+                    conf=config.conf_threshold, iou=config.iou_threshold, imgsz=config.imgsz,
+                    device=config.device, save=False, visualize=False, verbose=False,
+                    retina_masks=True, 
+                    show_boxes=config.show_boxes # Updated
+                )
+                print("Warm-up complete.")
+            except Exception as e:
+                print(f"Warm-up run failed for {valid_warmup_path}: {e}")
+        else:
+            print("Warm-up skipped: No valid image path found in the provided list for warm-up.")
+
+
+    for i, image_path in enumerate(image_paths):
+        if not os.path.exists(image_path):
+            print(f"Image not found at {image_path}, skipping run {i+1}.")
+            continue
+
+        try:
+            start_time = time.time()
+            _ = model.predict(
+                source=image_path, 
+                conf=config.conf_threshold,
+                iou=config.iou_threshold,
+                imgsz=config.imgsz,
+                device=config.device,
+                save=False, save_txt=False, project=None, name=None,
+                visualize=False, 
+                show_labels=config.show_labels, # Updated
+                show_conf=config.show_conf,     # Updated
+                show_boxes=config.show_boxes,   # Updated
+                retina_masks=True, verbose=False 
+            )
+            end_time = time.time()
+            current_inference_time = end_time - start_time
+            inference_times.append(current_inference_time)
+            if (i + 1) % 10 == 0 or i == len(image_paths) - 1:
+                 print(f"Completed run {i+1}/{len(image_paths)} on {Path(image_path).name} in {current_inference_time:.4f}s")
+        except Exception as e:
+            print(f"Error during inference for {image_path} (run {i+1}): {e}")
+            
+    if not inference_times:
+        print("No images were successfully processed for timing.")
+        return []
+        
+    return inference_times
+
+def visualize_single_result(result, img_path, inference_time, output_visualization_path, config): # Added config
+    """Visualize single image prediction with side-by-side comparison.
+       Saves the custom plot to output_visualization_path.
+    """
     if result is None:
         print("No result to visualize")
         return
     
-    # Create figure with side-by-side layout
+    os.makedirs(Path(output_visualization_path).parent, exist_ok=True)
+    
     plt.figure(figsize=(15, 6))
     
-    # Show original image on the left
     plt.subplot(1, 2, 1)
-    img = plt.imread(img_path)
-    plt.imshow(img)
-    plt.title(f"Original Image: {Path(img_path).name}")
+    try:
+        img = plt.imread(img_path)
+        plt.imshow(img)
+        plt.title(f"Original Image: {Path(img_path).name}")
+    except Exception as e:
+        plt.title(f"Could not load original: {Path(img_path).name}\n{e}")
     plt.axis('off')
     
-    # Show masked prediction on the right
     plt.subplot(1, 2, 2)
-    
-    # Create custom visualization with different colors for each instance
-    if hasattr(result, 'masks') and result.masks is not None:
-        # Read original image
+    if hasattr(result, 'masks') and result.masks is not None and len(result.masks.data) > 0:
         orig_img = cv2.imread(img_path)
         if orig_img is not None:
             orig_img = cv2.cvtColor(orig_img, cv2.COLOR_BGR2RGB)
-            
-            # Get mask data
-            masks = result.masks.data.cpu().numpy()
-            
-            # Create a blank image for the masks with same dimensions as original
+            masks_data = result.masks.data.cpu().numpy()
             mask_img = np.zeros_like(orig_img)
             
-            # Add each mask with a different color
-            for j, mask in enumerate(masks):
-                # Generate a random color for each instance
-                color = np.array([random.randint(0, 255), 
-                                 random.randint(0, 255), 
-                                 random.randint(0, 255)])
-                
-                # Get mask dimensions
+            for j, mask in enumerate(masks_data):
+                color = np.array([random.randint(50, 255), random.randint(50, 200), random.randint(50, 200)])
                 mask_h, mask_w = mask.shape
                 img_h, img_w = orig_img.shape[:2]
-                
-                # Reshape mask to match image dimensions
                 bin_mask = mask.astype('uint8')
                 if mask_h != img_h or mask_w != img_w:
                     bin_mask = cv2.resize(bin_mask, (img_w, img_h), interpolation=cv2.INTER_NEAREST)
-                
-                # Apply the mask with the random color
                 mask_img[bin_mask > 0] = color
             
-            # Blend the original image with the masks
             alpha = 0.5
-            blended = cv2.addWeighted(orig_img, 1-alpha, mask_img, alpha, 0)
+            blended = cv2.addWeighted(orig_img, 1 - alpha, mask_img, alpha, 0)
             plt.imshow(blended)
-            plt.title(f"Prediction ({len(masks)} objects, {inference_time:.3f}s)")
+            plt.title(f"Prediction ({len(masks_data)} objects, {inference_time:.3f}s)")
         else:
-            # If we can't load the original image, use the default plotting
-            plt.imshow(result.plot(boxes=False, labels=False, conf=False))
-            plt.title(f"Prediction ({inference_time:.3f}s)")
+            # Use result.plot for fallback if CV2 fails
+            plt.imshow(result.plot(
+                show_boxes=config.show_boxes, 
+                show_labels=config.show_labels, 
+                show_conf=config.show_conf
+            ))
+            plt.title(f"Prediction (CV2 Load Fail, {inference_time:.3f}s)")
     else:
-        # If there are no masks, use the default plotting
-        plt.imshow(result.plot(boxes=False, labels=False, conf=False))
-        plt.title(f"Prediction (No masks detected, {inference_time:.3f}s)")
+        # Use result.plot if no masks or for default plotting
+        plt.imshow(result.plot(
+            show_boxes=config.show_boxes, 
+            show_labels=config.show_labels, 
+            show_conf=config.show_conf
+        ))
+        plt.title(f"Prediction (No masks or default plot, {inference_time:.3f}s)")
     
     plt.axis('off')
-    
     plt.tight_layout()
-    output_file = os.path.join(output_path, f"prediction_{Path(img_path).stem}.png")
-    plt.savefig(output_file)
-    print(f"Visualization saved to {output_file}")
+    
+    plt.savefig(output_visualization_path)
+    print(f"Custom visualization saved to {output_visualization_path}")
     plt.show()
+    plt.close()
 
 def main():
     """Main function"""
-    # Initialize configuration
-    config = Config()
+    config = Config() 
     
-    # Load model
     model = load_model(config)
     if not model:
         return
+
+    image_paths_for_eval = get_random_image_paths(config.image_dir_path, config.num_separate_runs_for_timing)
     
-    # Run inference on single image
-    result, inference_time = run_single_inference(model, config)
-    
-    # Visualize result
-    if result:
-        visualize_single_result(result, config.image_path, inference_time, config.output_path)
-    
-    print("Inference completed!")
+    if not image_paths_for_eval:
+        print(f"No images found in {config.image_dir_path} for evaluation. Exiting timing evaluation.")
+    else:
+        all_separate_inference_times = evaluate_separate_inference_runs(model, image_paths_for_eval, config)
+
+        if all_separate_inference_times:
+            valid_times = [t for t in all_separate_inference_times if not np.isnan(t)]
+            if not valid_times:
+                print("No valid inference times recorded.")
+            else:
+                total_time_all_runs = sum(valid_times)
+                avg_time = np.mean(valid_times)
+                min_time = min(valid_times)
+                max_time = max(valid_times)
+                std_dev_time = np.std(valid_times)
+                median_time = np.median(valid_times)
+                
+                print("\n--- Separate Inference Runs Timing Summary ---")
+                print(f"Number of runs successfully timed: {len(valid_times)} / {len(image_paths_for_eval)}")
+                print(f"Total time for all {len(valid_times)} separate runs: {total_time_all_runs:.4f} seconds")
+                print(f"Average inference time per run: {avg_time:.4f} seconds")
+                print(f"Median inference time per run: {median_time:.4f} seconds")
+                print(f"Minimum inference time per run: {min_time:.4f} seconds")
+                print(f"Maximum inference time per run: {max_time:.4f} seconds")
+                print(f"Standard deviation of inference time: {std_dev_time:.4f} seconds")
+        else:
+            print("Separate inference runs timing did not produce any results.")
+
+        if image_paths_for_eval:
+            print("\n--- Running and Visualizing One Example ---")
+            
+            example_image_path = random.choice(image_paths_for_eval) 
+            if not os.path.exists(example_image_path):
+                print(f"Selected example image {example_image_path} not found. Skipping visualization.")
+                # Optionally, try another image or exit
+            else:
+                example_specific_output_folder_name = f"visualized_example_{Path(example_image_path).stem}"
+                yolo_project_dir = Path(config.output_path_base)
+                yolo_run_name = example_specific_output_folder_name 
+                
+                os.makedirs(yolo_project_dir / yolo_run_name, exist_ok=True)
+                
+                print(f"Running inference for visualization on: {example_image_path}")
+                start_time_single_viz = time.time()
+                try:
+                    results_single_list = model.predict(
+                        source=example_image_path,
+                        conf=config.conf_threshold, iou=config.iou_threshold, imgsz=config.imgsz,
+                        device=config.device,
+                        save=True,          
+                        save_txt=False,
+                        project=str(yolo_project_dir), 
+                        name=yolo_run_name,       
+                        visualize=False,    
+                        show_labels=config.show_labels, # Updated
+                        show_conf=config.show_conf,     # Updated
+                        show_boxes=config.show_boxes,   # Updated
+                        retina_masks=True, verbose=True 
+                    )
+                    end_time_single_viz = time.time()
+                    inference_time_single_viz = end_time_single_viz - start_time_single_viz
+                    print(f"Single example inference (for visualization) completed in {inference_time_single_viz:.4f} seconds")
+
+                    if results_single_list:
+                        result_single = results_single_list[0]
+                        custom_plot_filename = f"custom_visualization_{Path(example_image_path).stem}.png"
+                        # Ensure result_single.save_dir is valid, otherwise use a fallback
+                        save_dir_path = Path(result_single.save_dir) if hasattr(result_single, 'save_dir') and result_single.save_dir else yolo_project_dir / yolo_run_name / "predict" # Fallback if save_dir is None
+                        if not save_dir_path.exists():
+                            save_dir_path.mkdir(parents=True, exist_ok=True) # Create if it doesn't exist
+                        custom_plot_save_path = save_dir_path / custom_plot_filename
+                        
+                        visualize_single_result(result_single, example_image_path, inference_time_single_viz, str(custom_plot_save_path), config) # Pass config
+                    else:
+                        print("No results returned for the single example visualization.")
+                except Exception as e:
+                    print(f"Error during single example inference/visualization for {example_image_path}: {e}")
+        else:
+            print("\nSkipping single example visualization as no images were selected for timing runs.")
+
+    print("\nEvaluation script finished.")
 
 if __name__ == '__main__':
     main()

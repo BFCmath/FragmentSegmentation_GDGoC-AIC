@@ -24,7 +24,7 @@ class Config:
         self.name = 'fragment_seg'
         
         # Training parameters
-        self.epochs = 10
+        self.epochs = 20
         self.imgsz = 512  # Specified image size: 512x512
         self.batch_size = 16
         self.device = 0 if torch.cuda.is_available() else 'cpu'
