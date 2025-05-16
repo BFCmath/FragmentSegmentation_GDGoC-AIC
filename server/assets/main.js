@@ -243,11 +243,17 @@ function plotCdf(volumes) {
 /**
  * @param {Blob} blob
  */
-function displayMask(blob) {
+function displayMask(blob, sendTime) {
+  const receiveTime = performance.now();
+  console.log(`Time to receive response from server: ${(receiveTime - sendTime).toFixed(2)}ms`);
+  
   const img = new Image()
   const src = URL.createObjectURL(blob)
 
   img.addEventListener("load", () => {
+    const loadTime = performance.now();
+    console.log(`Time to load mask image: ${(loadTime - receiveTime).toFixed(2)}ms`);
+    
     const count = (img.height / img.width) >>> 0
     const colors = randomColor(count)
 
@@ -287,6 +293,10 @@ function displayMask(blob) {
     plotCdf(volumes)
     ctx.putImageData(imgdata, 0, 0)
     downloadBtn.removeAttribute("data-disabled")
+    
+    const renderTime = performance.now();
+    console.log(`Time to render results: ${(renderTime - loadTime).toFixed(2)}ms`);
+    console.log(`Total time from send to complete render: ${(renderTime - sendTime).toFixed(2)}ms`);
 
     URL.revokeObjectURL(src)
   })
@@ -325,13 +335,18 @@ function processFile(file) {
 
         const formdata = new FormData()
         formdata.append("file", blob, "input.png")
+        
+        const sendTime = performance.now();
+        console.log("Sending image to server using RGBD model...");
 
-        const resp = await fetch("/predict", {
+        // Always use RGBD model
+        const endpoint = `/predict`
+        const resp = await fetch(endpoint, {
           method: "POST",
           body: formdata,
         })
 
-        displayMask(await resp.blob())
+        displayMask(await resp.blob(), sendTime)
       }, "image/png")
     })
     img.src = src

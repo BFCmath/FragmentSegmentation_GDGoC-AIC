@@ -1,76 +1,120 @@
-from io import BytesIO
 import os
-
-from PIL import Image
 import numpy as np
 import torch
-import torchvision
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
-from torchvision.transforms import functional as F  # Add this import for handling binary data
+import random
+from PIL import Image
+from ultralytics import YOLO
+import cv2
+from io import BytesIO
 
+# Import the depth handler
+from depth_handler import DepthHandler
 
 class Config:
     # Model parameters
-    MASK_THRESHOLD = 0.5
-    BOX_DETECTIONS_PER_IMG = 250
-    MIN_SCORE = 0.59
+    CONF_THRESHOLD = 0.25
+    IOU_THRESHOLD = 0.7
+    RETINA_MASKS = True
     
     # Other settings
-    DEVICE = torch.device('cpu')  # Using CPU as specified
+    DEVICE = 'cpu'  # Using CPU as specified
 
     # Image dimensions
     WIDTH = 512
     HEIGHT = 512
-
-
-def get_model():
-    """Initialize and return the MaskR-CNN model"""
-    # 2 classes: background (0) and fragment (1)
-    NUM_CLASSES = 2
     
-    model = torchvision.models.detection.maskrcnn_resnet50_fpn(
-        weights=None,
-        weights_backbone=None,
-        box_detections_per_img=Config.BOX_DETECTIONS_PER_IMG
-    )
+    # Visualization settings
+    SHOW_LABELS = False
+    SHOW_CONF = False
+    SHOW_BOXES = False
 
-    # Get the number of input features for the classifier
-    in_features = model.roi_heads.box_predictor.cls_score.in_features
-    # Replace the pre-trained head with a new one
-    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, NUM_CLASSES)
 
-    # Now get the number of input features for the mask classifier
-    in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
-    hidden_layer = 256
-    # And replace the mask predictor with a new one
-    model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask, hidden_layer, NUM_CLASSES)
+def get_model(model_path):
+    """Initialize and return the YOLO model for RGBD inference"""
+    try:
+        model = YOLO(model_path)
+        return model
+    except Exception as e:
+        raise RuntimeError(f"Error loading YOLO model: {e}")
+
+
+def create_rgbd_image(rgb_image, depth_map):
+    """Create a 4-channel RGBD image by stacking RGB and depth
     
-    return model
+    Args:
+        rgb_image: RGB image as numpy array (H, W, 3)
+        depth_map: Depth map as numpy array (H, W)
+        
+    Returns:
+        RGBD image as numpy array (H, W, 4)
+    """
+    # Ensure images are the same size
+    if rgb_image.shape[:2] != depth_map.shape[:2]:
+        # Resize depth to match RGB
+        depth_map = cv2.resize(
+            depth_map,
+            (rgb_image.shape[1], rgb_image.shape[0]),
+            interpolation=cv2.INTER_NEAREST
+        )
+    
+    # Normalize depth map to 0-255 if it's not already
+    if depth_map.dtype != np.uint8:
+        min_val = depth_map.min()
+        max_val = depth_map.max()
+        if max_val > min_val:
+            depth_map = ((depth_map - min_val) / (max_val - min_val) * 255).astype(np.uint8)
+        else:
+            depth_map = np.zeros_like(depth_map, dtype=np.uint8)
+    
+    # Create 4-channel RGBD image
+    rgbd_image = np.dstack((rgb_image, depth_map))
+    
+    return rgbd_image
 
 
-class ModelHandler:
-    def __init__(self, model_path, logger):
-        """Initialize the model handler with path to model weights"""
+class RGBDModelHandler:
+    def __init__(self, model_path, depth_model_path, logger):
+        """Initialize the RGBD YOLO model handler
+        
+        Args:
+            model_path: Path to RGBD YOLO model weights file (.pt)
+            depth_model_path: Path to Depth Anything model weights
+            logger: Logger instance for recording events
+        """
         self.model_path = model_path
         self.device = Config.DEVICE
         
+        # Set random seed for reproducibility
+        torch.manual_seed(40)
+        np.random.seed(40)
+        random.seed(40)
+        
         try:
             if not os.path.exists(self.model_path):
-                raise FileNotFoundError(f'Model file not found: {self.model_path}')
+                raise FileNotFoundError(f'RGBD model file not found: {self.model_path}')
             
-            logger.info(f'Loading model from {self.model_path}')
-            self.model = get_model()
-            self.model.load_state_dict(torch.load(self.model_path, map_location=self.device, weights_only=True))
-            self.model.to(self.device)
-            self.model.eval()  # Set to evaluation mode
-            logger.info(f'Model loaded successfully from {model_path}')
+            logger.info(f'Loading RGBD YOLO model from {self.model_path}')
+            self.model = get_model(self.model_path)
+            
+            # Initialize depth estimation model
+            logger.info(f'Initializing depth handler with model: {depth_model_path}')
+            self.depth_handler = DepthHandler(depth_model_path, logger)
+            
+            logger.info(f'RGBD model initialized successfully')
+            
         except Exception as e:
-            logger.error(f'Failed to load model: {str(e)}')
+            logger.error(f'Failed to load RGBD model: {str(e)}')
             raise
     
     def preprocess(self, image_bytes):
-        """Preprocess image for model input"""
+        """Preprocess image for model input - generates RGB and depth, combines to RGBD
+        
+        Args:
+            image_bytes: Input image as bytes or PIL Image
+            
+        Returns:
+            RGBD image as numpy array
+        """
         if isinstance(image_bytes, bytes):
             # Convert bytes to PIL Image using BytesIO
             image = Image.open(BytesIO(image_bytes)).convert('RGB')
@@ -81,48 +125,74 @@ class ModelHandler:
         # Resize if needed
         if image.size != (Config.WIDTH, Config.HEIGHT):
             image = image.resize((Config.WIDTH, Config.HEIGHT))
-            
-        # Convert to tensor
-        img_tensor = F.to_tensor(image)
-            
-        return img_tensor
-
+        
+        # Convert to numpy array
+        rgb_img = np.array(image)
+        
+        # Generate depth map using depth handler
+        depth_map = self.depth_handler.predict(image_bytes)
+        depth_map = self.depth_handler.postprocess(depth_map)
+        
+        # Combine RGB and depth into RGBD
+        rgbd_img = create_rgbd_image(rgb_img, depth_map)
+        
+        return rgbd_img
 
     def predict(self, image_bytes):
-        """Run inference on an image and return predictions"""
-
-        # Preprocess the image
-        img_tensor = self.preprocess(image_bytes)
+        """Run inference on an image and return predictions
+        
+        Args:
+            image_bytes: Input image as bytes or PIL Image
+            
+        Returns:
+            Prediction results
+        """
+        # Preprocess the image to get RGBD
+        rgbd_img = self.preprocess(image_bytes)
         
         # Perform inference
-        with torch.no_grad():
-            predictions = self.model([img_tensor.to(self.device)])[0]
+        results = self.model.predict(
+            source=rgbd_img,
+            conf=Config.CONF_THRESHOLD,
+            iou=Config.IOU_THRESHOLD,
+            imgsz=(Config.WIDTH, Config.HEIGHT),
+            device=self.device,
+            retina_masks=Config.RETINA_MASKS,
+            show_labels=Config.SHOW_LABELS,
+            show_conf=Config.SHOW_CONF,
+            show_boxes=Config.SHOW_BOXES,
+            save=False,
+            verbose=False
+        )
+        return results[0] if results else None
             
-        return predictions
-            
-
-    def postprocess(self, predictions):
-        """Process raw model predictions into final output format"""
+    def postprocess(self, prediction):
+        """Process raw model predictions into final output format
+        
+        Args:
+            prediction: Raw prediction from YOLO model
+        
+        Returns:
+            Processed masks stacked vertically in a single image
+        """
+        if prediction is None or not hasattr(prediction, 'masks') or prediction.masks is None:
+            return np.zeros((Config.HEIGHT, Config.WIDTH), dtype=np.uint8)  # Return an empty mask
+        
         masks = []
         
-        previous_masks = None
-        
-        for i, mask_tensor in enumerate(predictions['masks']):
-            score = predictions['scores'][i].cpu().item()
-            # Filter by confidence threshold
-            if score < Config.MIN_SCORE:
-                continue
-                
-            # Convert mask tensor to numpy array
-            mask_np = mask_tensor.cpu().numpy()[0]
-            binary_mask = mask_np >= Config.MASK_THRESHOLD
+        # Convert masks to numpy arrays
+        if len(prediction.masks.data) > 0:
+            masks_data = prediction.masks.data.cpu().numpy()
             
-            # Remove overlapping pixels
-            if previous_masks is None:
-                previous_masks = binary_mask.copy()
-            else:
-                binary_mask[binary_mask & previous_masks] = 0
-                previous_masks |= binary_mask
-
-            masks.append(binary_mask)
-        return np.vstack(masks)
+            # Process all masks
+            for mask in masks_data:
+                # Ensure the mask is binary with 255 for white
+                binary_mask = (mask > 0).astype(np.uint8) * 255
+                masks.append(binary_mask)
+                
+            if masks:
+                # Stack the masks vertically for frontend display
+                stacked_img = np.vstack(masks)
+                return stacked_img
+        
+        return np.zeros((Config.HEIGHT, Config.WIDTH), dtype=np.uint8)  # Return an empty mask
