@@ -6,6 +6,7 @@ from PIL import Image
 from ultralytics import YOLO
 import cv2
 from io import BytesIO
+from abc import ABC, abstractmethod
 
 # Import the depth handler
 from utils.depth_handler import DepthHandler
@@ -28,7 +29,6 @@ class Config:
     SHOW_CONF = False
     SHOW_BOXES = False
 
-
 def get_model(model_path):
     """Initialize and return the YOLO model for RGBD inference"""
     try:
@@ -36,7 +36,6 @@ def get_model(model_path):
         return model
     except Exception as e:
         raise RuntimeError(f"Error loading YOLO model: {e}")
-
 
 def create_rgbd_image(rgb_image, depth_map):
     """Create a 4-channel RGBD image by stacking RGB and depth
@@ -71,18 +70,18 @@ def create_rgbd_image(rgb_image, depth_map):
     
     return rgbd_image
 
+class BaseModelHandler(ABC):
+    """Base class for all model handlers with common functionality"""
+    def __init__(self, model_path, logger):
+        """Initialize the base model handler
 
-class RGBDModelHandler:
-    def __init__(self, model_path, depth_model_path, logger):
-        """Initialize the RGBD YOLO model handler
-        
         Args:
-            model_path: Path to RGBD YOLO model weights file (.pt)
-            depth_model_path: Path to Depth Anything model weights
+            model_path: Path to model weights file (.pt)
             logger: Logger instance for recording events
         """
         self.model_path = model_path
         self.device = Config.DEVICE
+        self.logger = logger
         
         # Set random seed for reproducibility
         torch.manual_seed(40)
@@ -91,19 +90,107 @@ class RGBDModelHandler:
         
         try:
             if not os.path.exists(self.model_path):
-                raise FileNotFoundError(f'RGBD model file not found: {self.model_path}')
+                raise FileNotFoundError(f'Model file not found: {self.model_path}')
             
-            logger.info(f'Loading RGBD YOLO model from {self.model_path}')
+            self.logger.info(f'Loading YOLO model from {self.model_path}')
             self.model = get_model(self.model_path)
-            
-            # Initialize depth estimation model
-            logger.info(f'Initializing depth handler with model: {depth_model_path}')
-            self.depth_handler = DepthHandler(depth_model_path, logger)
-            
-            logger.info(f'RGBD model initialized successfully')
-            
+            self.logger.info(f'YOLO model loaded successfully from {model_path}')
         except Exception as e:
-            logger.error(f'Failed to load RGBD model: {str(e)}')
+            self.logger.error(f'Failed to load YOLO model: {str(e)}')
+            raise
+    
+    @abstractmethod
+    def preprocess(self, image_bytes):
+        """Preprocess image for model input - to be implemented by subclasses"""
+        pass
+    
+    def predict(self, image_bytes):
+        """Run inference on an image and return predictions
+        
+        Args:
+            image_bytes: Input image as bytes or PIL Image
+            
+        Returns:
+            Prediction results
+        """
+        # Preprocess the image
+        processed_input = self.preprocess(image_bytes)
+        
+        # Perform inference
+        results = self.model.predict(
+            source=processed_input,
+            conf=Config.CONF_THRESHOLD,
+            iou=Config.IOU_THRESHOLD,
+            imgsz=(Config.WIDTH, Config.HEIGHT),
+            device=self.device,
+            retina_masks=Config.RETINA_MASKS,
+            show_labels=Config.SHOW_LABELS,
+            show_conf=Config.SHOW_CONF,
+            show_boxes=Config.SHOW_BOXES,
+            save=False,
+            verbose=False
+        )
+        return results[0] if results else None
+
+    def postprocess(self, prediction):
+        """Process raw model predictions into final output format
+        
+        Args:
+            prediction: Raw prediction from YOLO model
+        
+        Returns:
+            tuple: (stacked_img, volumes) where:
+                - stacked_img: Processed masks stacked vertically in a single image
+                - volumes: List of calculated volumes for each mask
+        """
+        if prediction is None or not hasattr(prediction, 'masks') or prediction.masks is None:
+            return np.zeros((Config.HEIGHT, Config.WIDTH), dtype=np.uint8), []  # Return an empty mask and empty volumes
+        
+        masks = []
+        volumes = []
+        
+        # Convert masks to numpy arrays
+        if len(prediction.masks.data) > 0:
+            masks_data = prediction.masks.data.cpu().numpy()
+            
+            # Process all masks
+            for mask in masks_data:
+                # Ensure the mask is binary with 255 for white
+                binary_mask = (mask > 0).astype(np.uint8) * 255
+                
+                # Calculate volume for this mask
+                pixel_count = np.sum(binary_mask > 0)
+                volume = (4/3) * np.power(pixel_count / np.pi, 3/2)
+                
+                masks.append(binary_mask)
+                volumes.append(float(volume))
+                
+            if masks:
+                # Stack the masks vertically for frontend display
+                stacked_img = np.vstack(masks)
+                return stacked_img, volumes
+        
+        return np.zeros((Config.HEIGHT, Config.WIDTH), dtype=np.uint8), []  # Return an empty mask and empty volumes
+
+class RGBDModelHandler(BaseModelHandler):
+    def __init__(self, model_path, depth_model_path, logger):
+        """Initialize the RGBD YOLO model handler
+        
+        Args:
+            model_path: Path to RGBD YOLO model weights file (.pt)
+            depth_model_path: Path to Depth Anything model weights
+            logger: Logger instance for recording events
+        """
+        # Initialize the base class
+        super().__init__(model_path, logger)
+        
+        try:
+            # Initialize depth estimation model
+            self.logger.info(f'Initializing depth handler with model: {depth_model_path}')
+            self.depth_handler = DepthHandler(depth_model_path, logger)
+            self.logger.info(f'RGBD model initialized successfully')
+        except Exception as e:
+            self.logger.error(f'Failed to initialize depth model: {str(e)}')
             raise
     
     def preprocess(self, image_bytes):
@@ -138,130 +225,36 @@ class RGBDModelHandler:
         
         return rgbd_img
 
-    def predict(self, image_bytes):
-        """Run inference on an image and return predictions
+class ModelHandler(BaseModelHandler):
+    def __init__(self, model_path, logger):
+        """Initialize the standard RGB model handler
+        
+        Args:
+            model_path: Path to RGB YOLO model weights file (.pt)
+            logger: Logger instance for recording events
+        """
+        # Initialize the base class
+        super().__init__(model_path, logger)
+
+    def preprocess(self, image_bytes):
+        """Preprocess image for model input
         
         Args:
             image_bytes: Input image as bytes or PIL Image
             
         Returns:
-            Prediction results
+            Numpy array ready for model input
         """
-        # Preprocess the image to get RGBD
-        rgbd_img = self.preprocess(image_bytes)
-        
-        # Perform inference
-        results = self.model.predict(
-            source=rgbd_img,
-            conf=Config.CONF_THRESHOLD,
-            iou=Config.IOU_THRESHOLD,
-            imgsz=(Config.WIDTH, Config.HEIGHT),
-            device=self.device,
-            retina_masks=Config.RETINA_MASKS,
-            show_labels=Config.SHOW_LABELS,
-            show_conf=Config.SHOW_CONF,
-            show_boxes=Config.SHOW_BOXES,
-            save=False,
-            verbose=False
-        )
-        return results[0] if results else None
-            
-    def postprocess(self, prediction):
-        """Process raw model predictions into final output format
-        
-        Args:
-            prediction: Raw prediction from YOLO model
-        
-        Returns:
-            Processed masks stacked vertically in a single image
-        """
-        if prediction is None or not hasattr(prediction, 'masks') or prediction.masks is None:
-            return np.zeros((Config.HEIGHT, Config.WIDTH), dtype=np.uint8)  # Return an empty mask
-        
-        masks = []
-        
-        # Convert masks to numpy arrays
-        if len(prediction.masks.data) > 0:
-            masks_data = prediction.masks.data.cpu().numpy()
-            
-            # Process all masks
-            for mask in masks_data:
-                # Ensure the mask is binary with 255 for white
-                binary_mask = (mask > 0).astype(np.uint8) * 255
-                masks.append(binary_mask)
-                
-            if masks:
-                # Stack the masks vertically for frontend display
-                stacked_img = np.vstack(masks)
-                return stacked_img
-        
-        return np.zeros((Config.HEIGHT, Config.WIDTH), dtype=np.uint8)  # Return an empty mask
-
-
-class ModelHandler:
-    def __init__(self, model_path, logger):
-        self.model_path = model_path
-        self.device = Config.DEVICE
-        # Set random seed for reproducibility
-        torch.manual_seed(40)
-        np.random.seed(40)
-        random.seed(40)
-        try:
-            if not os.path.exists(self.model_path):
-                raise FileNotFoundError(f'Model file not found: {self.model_path}')
-            logger.info(f'Loading YOLO model from {self.model_path}')
-            self.model = get_model(self.model_path)
-            logger.info(f'YOLO model loaded successfully from {model_path}')
-        except Exception as e:
-            logger.error(f'Failed to load YOLO model: {str(e)}')
-            raise
-
-    def preprocess(self, image_bytes):
-        """Preprocess image for model input"""
         if isinstance(image_bytes, bytes):
             # Convert bytes to PIL Image using BytesIO
             image = Image.open(BytesIO(image_bytes)).convert('RGB')
         else:
             # Already a PIL Image
             image = image_bytes
+            
         # Resize if needed
         if image.size != (Config.WIDTH, Config.HEIGHT):
             image = image.resize((Config.WIDTH, Config.HEIGHT))
-        return image
-
-    def predict(self, image_bytes):
-        """Run inference on an image and return predictions"""
-        # Preprocess the image
-        image = self.preprocess(image_bytes)
+            
         # Convert PIL to numpy array
-        img_array = np.array(image)
-        # Perform inference
-        results = self.model.predict(
-            source=img_array,
-            conf=Config.CONF_THRESHOLD,
-            iou=Config.IOU_THRESHOLD,
-            imgsz=(Config.WIDTH, Config.HEIGHT),
-            device=self.device,
-            retina_masks=Config.RETINA_MASKS,
-            show_labels=Config.SHOW_LABELS,
-            show_conf=Config.SHOW_CONF,
-            show_boxes=Config.SHOW_BOXES,
-            save=False,
-            verbose=False
-        )
-        return results[0] if results else None
-
-    def postprocess(self, prediction):
-        if prediction is None or not hasattr(prediction, 'masks') or prediction.masks is None:
-            return np.zeros((Config.HEIGHT, Config.WIDTH), dtype=np.uint8)  # Return an empty mask
-        masks = []
-        if len(prediction.masks.data) > 0:
-            masks_data = prediction.masks.data.cpu().numpy()
-            # Process all masks
-            for mask in masks_data:
-                binary_mask = (mask > 0).astype(np.uint8) * 255
-                masks.append(binary_mask)
-            if masks:
-                stacked_img = np.vstack(masks)
-                return stacked_img
-        return np.zeros((Config.HEIGHT, Config.WIDTH), dtype=np.uint8)  # Return an empty mask
+        return np.array(image)

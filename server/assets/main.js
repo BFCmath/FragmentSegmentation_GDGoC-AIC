@@ -244,8 +244,10 @@ function plotCdf(volumes) {
 
 /**
  * @param {Blob} blob
+ * @param {number} sendTime
+ * @param {number[]} [serverVolumes] - Volume data from server response
  */
-function displayMask(blob, sendTime) {
+function displayMask(blob, sendTime, serverVolumes) {
   const receiveTime = performance.now();
   console.log(`Time to receive response from server: ${(receiveTime - sendTime).toFixed(2)}ms`);
   
@@ -265,7 +267,8 @@ function displayMask(blob, sendTime) {
     const imgdata = ctx.getImageData(0, 0, canvas.width, canvas.height)
     const datalen = imgdata.data.length
 
-    const volumes = new Float64Array(count)
+    // Use server-provided volumes if available, otherwise create empty array
+    const volumes = serverVolumes ? new Float64Array(serverVolumes) : new Float64Array(count)
 
     let sy = 0
     for (let i = 0; i < count; ++i) {
@@ -286,9 +289,10 @@ function displayMask(blob, sendTime) {
         }
       }
 
-
-      // areas[i] = Math.sqrt(pixelCount / Math.PI)
-      volumes[i] = 4/3 * Math.pow(pixelCount / Math.PI, 3/2)
+      // Only calculate volumes if not provided by server
+      if (!serverVolumes) {
+        volumes[i] = 4/3 * Math.pow(pixelCount / Math.PI, 3/2)
+      }
       sy += img.width
     }
 
@@ -340,15 +344,21 @@ function processFile(file) {
         
         const sendTime = performance.now();          
         console.log(`Sending image to server using RGBD model in ${preciseMode ? 'precise' : 'fast'} mode...`);
-
-        // Use a string mode parameter: "precise" or "fast" to indicate depth usage
         const endpoint = `/predict?use_depth=${preciseMode ? 'precise' : 'fast'}`
         const resp = await fetch(endpoint, {
           method: "POST",
           body: formdata,
-        })
-
-        displayMask(await resp.blob(), sendTime)
+        })        
+        const jsonResponse = await resp.json();
+        
+        if (!jsonResponse.success) {
+          console.error("Error from server:", jsonResponse.error);
+          alert(`Error processing image: ${jsonResponse.error}`);
+          return;
+        }
+        
+        const imgBlob = await fetch(jsonResponse.image_data).then(r => r.blob());
+        displayMask(imgBlob, sendTime, jsonResponse.volumes)
       }, "image/png")
     })
     img.src = src

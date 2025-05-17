@@ -4,11 +4,12 @@ import logging
 from os import environ as env
 import sys
 import time
+import base64
 from PIL import Image
 from fastapi import FastAPI, UploadFile, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
@@ -67,40 +68,56 @@ async def process_image(req: Request, file: UploadFile, use_depth: bool = False)
 
     start_time = time.time()
 
-    try:
-        # Validate file type
+    try:       
         if file.content_type not in ['image/jpeg', 'image/png']:
-            return Response(
+            return JSONResponse(
                 status_code=403,
-                content=f'Invalid file type: {file.content_type}. Only JPEG and PNG are supported.'
+                content={
+                    "success": False,
+                    "error": f'Invalid file type: {file.content_type}. Only JPEG and PNG are supported.'
+                }
             )
-        # Read the image file
+        
         contents = await file.read()
         if not contents:
-            return Response(
+            return JSONResponse(
                 status_code=400,
-                content=f'Empty file received'
+                content={
+                    "success": False,
+                    "error": "Empty file received"
+                }            
             )
-        # Process image
+            
         predictions = model_handler.predict(contents)
-        # Convert predictions to desired output format
-        result = model_handler.postprocess(predictions)
+        result, volumes = model_handler.postprocess(predictions)
         img = Image.fromarray(result)
-        # Log processing time
+        
         process_time = time.time() - start_time
         logger.info(f'Processed {req.client} with {model_type} model in {process_time:.2f} seconds')
         img_out = BytesIO()
         img.save(img_out, format='PNG')
         img_out.seek(0)
-        return StreamingResponse(img_out, media_type='image/png')
+        
+        img_base64 = base64.b64encode(img_out.getvalue()).decode('utf-8')
+        
+        return JSONResponse({
+            "success": True,
+            "image_data": f"data:image/png;base64,{img_base64}",
+            "volumes": volumes
+        })
+        
     except Exception as e:
         logger.error(f'Failed to process {req.client} with {model_type} model: {e}')
         if use_depth:
             import traceback
             logger.error(traceback.format_exc())
-        return Response(
+
+        return JSONResponse(
             status_code=500,
-            content=f'Error processing image: {e}'
+            content={
+                "success": False,
+                "error": str(e)
+            }
         )
 
 async def predict(req: Request, file: UploadFile, use_depth: str = Query("fast")):
