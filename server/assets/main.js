@@ -74,9 +74,8 @@ function drawPrompt() {
 }
 
 function clearCdf() {
-  while (points.lastElementChild) {
-    points.removeChild(points.lastElementChild)
-  }
+  // Clear all points in a single operation - more efficient than removing one by one
+  points.innerHTML = ''
 
   lines.removeAttribute("d")
 
@@ -85,7 +84,7 @@ function clearCdf() {
     elem.line.removeAttribute("x1")
     elem.line.removeAttribute("y1")
     elem.line.removeAttribute("x2")
-    elem.line.removeAttribute("y1")
+    elem.line.removeAttribute("y2") 
   }
 }
 
@@ -164,9 +163,10 @@ function plotCdf(volumes) {
     child.textContent = tick.toFixed(0)
     tick += inc
   }
-
-  while (points.childElementCount) {
-    throw new Error("CDF plot is not empty")
+  
+  // Clear any existing points first
+  if (points.childElementCount) {
+    points.innerHTML = '';
   }
 
   const yDec = 500 / volumes.length
@@ -261,9 +261,11 @@ function displayMask(blob, sendTime, serverVolumes) {
     const count = (img.height / img.width) >>> 0
     const colors = randomColor(count)
 
+    // Set dimensions only once
     offscreenCanvas.width = canvas.width
     offscreenCanvas.height = canvas.height
 
+    // Get source image data once
     const imgdata = ctx.getImageData(0, 0, canvas.width, canvas.height)
     const datalen = imgdata.data.length
 
