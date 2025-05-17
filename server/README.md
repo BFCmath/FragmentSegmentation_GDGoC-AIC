@@ -7,3 +7,10 @@
 - pythoon app.py
 
 - remember to download the model weights
+
+## TODO
+- rgbd vs rgb
+- onnx
+- docker
+- sign in sign out
+- MinIO
