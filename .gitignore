@@ -4,3 +4,4 @@ __pycache__/
 api.log
 test_client.py
 server/Depth-Anything-V2/*
+server/NOTE.md
