@@ -74,8 +74,9 @@ function drawPrompt() {
 }
 
 function clearCdf() {
-  // Clear all points in a single operation - more efficient than removing one by one
-  points.innerHTML = ''
+  while (points.lastElementChild) {
+    points.removeChild(points.lastElementChild)
+  }
 
   lines.removeAttribute("d")
 
@@ -165,8 +166,8 @@ function plotCdf(volumes) {
   }
   
   // Clear any existing points first
-  if (points.childElementCount) {
-    points.innerHTML = '';
+  while (points.childElementCount) {
+    throw new Error("CDF plot is not empty") 
   }
 
   const yDec = 500 / volumes.length
