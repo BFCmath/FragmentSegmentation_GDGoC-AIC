@@ -103,8 +103,9 @@ async def process_image(req: Request, file: UploadFile, use_depth: bool = False)
             content=f'Error processing image: {e}'
         )
 
-async def predict(req: Request, file: UploadFile, use_depth: bool = Query(False)):
-    return await process_image(req, file, use_depth=use_depth)
+async def predict(req: Request, file: UploadFile, use_depth: str = Query("fast")):
+    use_depth_mode = use_depth.lower() == "precise"
+    return await process_image(req, file, use_depth=use_depth_mode)
 
 def make_app(is_dev: bool) -> FastAPI:
     app = FastAPI(lifespan=lifespan)

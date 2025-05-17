@@ -338,11 +338,11 @@ function processFile(file) {
         const formdata = new FormData()
         formdata.append("file", blob, "input.png")
         
-        const sendTime = performance.now();        
+        const sendTime = performance.now();          
         console.log(`Sending image to server using RGBD model in ${preciseMode ? 'precise' : 'fast'} mode...`);
 
-        // Always use RGBD model with preciseMode as depth mode parameter
-        const endpoint = `/predict?use_depth=${preciseMode ? 'true' : 'false'}`
+        // Use a string mode parameter: "precise" or "fast" to indicate depth usage
+        const endpoint = `/predict?use_depth=${preciseMode ? 'precise' : 'fast'}`
         const resp = await fetch(endpoint, {
           method: "POST",
           body: formdata,

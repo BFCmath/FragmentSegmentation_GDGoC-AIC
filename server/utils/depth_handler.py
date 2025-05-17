@@ -4,14 +4,8 @@ import torch
 import numpy as np
 from io import BytesIO
 from PIL import Image
-import sys
 
-# Add Depth-Anything-V2 to system path if it's not already there
-depth_anything_path = "Depth-Anything-V2"
-if depth_anything_path not in sys.path:
-    sys.path.append(depth_anything_path)
-
-from depth.depth_anything_v2.dpt import DepthAnythingV2
+from utils.depth.depth_anything_v2.dpt import DepthAnythingV2
 
 class Config:
     MODEL_TYPE = 'vits'  # Small model (options: vits, vitb, vitl, vitg)

@@ -8,7 +8,7 @@ import cv2
 from io import BytesIO
 
 # Import the depth handler
-from depth_handler import DepthHandler
+from utils.depth_handler import DepthHandler
 
 class Config:
     # Model parameters
