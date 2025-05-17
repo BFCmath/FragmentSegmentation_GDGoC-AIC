@@ -1,4 +1,6 @@
 // @ts-check
+// Global variable for precise/fast mode toggle
+let preciseMode = false;
 
 /**
  * @param {string} msg
@@ -336,11 +338,11 @@ function processFile(file) {
         const formdata = new FormData()
         formdata.append("file", blob, "input.png")
         
-        const sendTime = performance.now();
-        console.log("Sending image to server using RGBD model...");
+        const sendTime = performance.now();        
+        console.log(`Sending image to server using RGBD model in ${preciseMode ? 'precise' : 'fast'} mode...`);
 
-        // Always use RGBD model
-        const endpoint = `/predict`
+        // Always use RGBD model with preciseMode as depth mode parameter
+        const endpoint = `/predict?use_depth=${preciseMode ? 'true' : 'false'}`
         const resp = await fetch(endpoint, {
           method: "POST",
           body: formdata,
@@ -386,5 +388,14 @@ function reset() {
 const form = assertClass(HTMLFormElement, document.querySelector("#main"))
 form.addEventListener("submit", e => e.preventDefault())
 form.addEventListener("reset", reset)
+
+// Add event listener for the mode toggle button
+const modeToggleBtn = document.querySelector('#mode-toggle-btn');
+if (modeToggleBtn) {
+  modeToggleBtn.addEventListener('click', () => {
+    preciseMode = !preciseMode;
+    modeToggleBtn.textContent = preciseMode ? 'Switch to Fast Mode' : 'Switch to Precise Mode';
+  });
+}
 
 reset()
