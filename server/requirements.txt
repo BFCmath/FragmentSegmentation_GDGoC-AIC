@@ -1,11 +1,18 @@
+# API dependencies
 fastapi==0.103.1
 uvicorn==0.23.2
 python-multipart==0.0.6
+
+# Machine learning dependencies
 torch==2.0.1
 torchvision==0.15.2
+ultralytics==8.0.196
+opencv-python==4.8.1.78
+
+# Image processing
 pillow==10.0.1
 numpy==1.24.3
-ultralytics
-gradio_imageslider
+
+# UI dependencies
 gradio==4.29.0
-opencv-python
+gradio_imageslider==0.1.2
