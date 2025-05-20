@@ -5,7 +5,7 @@ import numpy as np
 from io import BytesIO
 from PIL import Image
 
-from utils.depth.depth_anything_v2.dpt import DepthAnythingV2
+from utils.depth_anything_v2.dpt import DepthAnythingV2
 
 class Config:
     MODEL_TYPE = 'vits'  # Small model (options: vits, vitb, vitl, vitg)
