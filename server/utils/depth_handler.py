@@ -1,16 +1,28 @@
+"""
+Depth estimation handler for generating depth maps from RGB images.
+
+This module provides functionality to load and use the Depth Anything V2 model
+for estimating depth maps from RGB images, which are then used in RGBD processing.
+"""
+
 import os
-import cv2
-import torch
-import numpy as np
 from io import BytesIO
+from typing import Dict, Optional, Union
+
+import cv2
+import numpy as np
+import torch
 from PIL import Image
 
 from utils.depth_anything_v2.dpt import DepthAnythingV2
 
+
 class Config:
+    """Configuration settings for depth estimation model."""
+    
     MODEL_TYPE = 'vits'  # Small model (options: vits, vitb, vitl, vitg)
     
-    # Other settings
+    # Device settings
     DEVICE = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
     
     # Image dimensions
@@ -26,8 +38,9 @@ class Config:
     }
 
 
-def get_model(model_path, model_type='vits'):
-    """Initialize and return the Depth Anything V2 model
+def get_model(model_path: str, model_type: str = 'vits') -> DepthAnythingV2:
+    """
+    Initialize and return the Depth Anything V2 model.
     
     Args:
         model_path: Path to model weights file
@@ -35,6 +48,9 @@ def get_model(model_path, model_type='vits'):
         
     Returns:
         Initialized model ready for inference
+        
+    Raises:
+        RuntimeError: If model loading fails
     """
     try:
         model = DepthAnythingV2(**Config.MODEL_CONFIGS[model_type])
@@ -46,13 +62,20 @@ def get_model(model_path, model_type='vits'):
 
 
 class DepthHandler:
-    def __init__(self, model_path, logger, model_type='vits'):
-        """Initialize the Depth Anything model handler
+    """Handles depth estimation using Depth Anything V2 model."""
+    
+    def __init__(self, model_path: str, logger, model_type: str = 'vits'):
+        """
+        Initialize the Depth Anything model handler.
         
         Args:
             model_path: Path to Depth Anything model weights file (.pth)
             logger: Logger instance for recording events
             model_type: Type of model (vits, vitb, vitl, vitg)
+            
+        Raises:
+            FileNotFoundError: If model file doesn't exist
+            RuntimeError: If model loading fails
         """
         self.model_path = model_path
         self.model_type = model_type
@@ -70,8 +93,9 @@ class DepthHandler:
             logger.error(f'Failed to load Depth Anything model: {str(e)}')
             raise
     
-    def preprocess(self, image_bytes):
-        """Preprocess image for model input
+    def preprocess(self, image_bytes: Union[bytes, np.ndarray]) -> np.ndarray:
+        """
+        Preprocess image for model input.
         
         Args:
             image_bytes: Input image as bytes or PIL Image
@@ -92,8 +116,9 @@ class DepthHandler:
             
         return bgr_img
     
-    def predict(self, image_bytes):
-        """Run depth estimation on an image and return depth map
+    def predict(self, image_bytes: Union[bytes, np.ndarray]) -> np.ndarray:
+        """
+        Run depth estimation on an image and return depth map.
         
         Args:
             image_bytes: Input image as bytes or PIL Image
@@ -110,8 +135,9 @@ class DepthHandler:
         
         return depth_map
             
-    def postprocess(self, depth_map, normalize=True):
-        """Process depth map into a visualizable format
+    def postprocess(self, depth_map: Optional[np.ndarray], normalize: bool = True) -> np.ndarray:
+        """
+        Process depth map into a visualizable format.
         
         Args:
             depth_map: Depth map from model
