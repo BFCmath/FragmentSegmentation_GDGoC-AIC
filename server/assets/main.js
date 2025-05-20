@@ -1,6 +1,6 @@
 // @ts-check
 // Global variable for precise/fast mode toggle
-let preciseMode = false;
+let preciseMode = false; // Default to Fast
 let useLogScaleX = false; // For X-axis log scale
 let lastPlottedVolumes = null; // To store volumes for replotting
 let lastPlottedColors = null; // To store colors for replotting
@@ -43,10 +43,8 @@ const downloadCanvasBtn = assertClass(HTMLButtonElement, document.querySelector(
 const downloadPlotCornerBtn = assertClass(HTMLButtonElement, document.querySelector("#download-plot-corner-btn"))
 
 // New Radio Button References
-const modeFastRadio = assertClass(HTMLInputElement, document.querySelector("#mode-fast"));
-const modePreciseRadio = assertClass(HTMLInputElement, document.querySelector("#mode-precise"));
-const scaleLinRadio = assertClass(HTMLInputElement, document.querySelector("#scale-lin"));
-const scaleLogRadio = assertClass(HTMLInputElement, document.querySelector("#scale-log"));
+const modeToggleInput = assertClass(HTMLInputElement, document.querySelector("#mode-toggle-input"));
+const scaleToggleInput = assertClass(HTMLInputElement, document.querySelector("#scale-toggle-input"));
 const xAxisScaleControlsPanel = assertClass(HTMLElement, document.querySelector("#x-axis-scale-controls-panel"));
 
 const quantileElems = [
@@ -416,13 +414,16 @@ function displayMask(blob, sendTime, serverVolumes) {
     downloadCanvasBtn.disabled = false;
     downloadPlotCornerBtn.disabled = false;
     xAxisScaleControlsPanel.style.display = 'flex'; // Show X-axis scale controls
-    scaleLinRadio.disabled = false;
-    scaleLogRadio.disabled = false;
+    scaleToggleInput.disabled = false;
     loader.classList.add("loader-hidden"); 
     
     const renderTime = performance.now();
     console.log(`Time to render results: ${(renderTime - loadTime).toFixed(2)}ms`);
     console.log(`Total time from send to complete render: ${(renderTime - sendTime).toFixed(2)}ms`);
+
+    // Enable scale toggle and set its initial state (after processing)
+    scaleToggleInput.disabled = false;
+    xAxisScaleControlsPanel.style.display = 'flex'; // Show X-axis scale controls
 
     URL.revokeObjectURL(src)
   })
@@ -520,8 +521,11 @@ function reset() {
   lastPlottedVolumes = null;
   lastPlottedColors = null;
   xAxisScaleControlsPanel.style.display = 'none'; // Hide X-axis scale controls
-  scaleLinRadio.disabled = true;
-  scaleLogRadio.disabled = true;
+  scaleToggleInput.disabled = true; // Disable scale toggle on reset
+  // Ensure scale toggle is reset to Linear (unchecked)
+  scaleToggleInput.checked = false;
+  const scaleChangeEventInitial = new Event('change'); // Dispatch change to update text styles
+  scaleToggleInput.dispatchEvent(scaleChangeEventInitial);
   
   plotCdf(new Float64Array(), new Uint8ClampedArray()); // Call with empty typed arrays
 }
@@ -533,33 +537,64 @@ form.addEventListener("submit", e => e.preventDefault())
 const clearBtn = assertClass(HTMLButtonElement, document.querySelector('#clear-btn'));
 clearBtn.addEventListener('click', reset);
 
-// Event listeners for new radio buttons
-document.querySelectorAll('input[name="processing-mode"]').forEach(radio => {
-  radio.addEventListener('change', (event) => {
+// Event listener for the new mode toggle switch
+modeToggleInput.addEventListener('change', (event) => {
     if (event.target instanceof HTMLInputElement) {
-        preciseMode = event.target.value === 'precise';
+        preciseMode = event.target.checked; // true if checked (Precise), false if not (Fast)
         console.log(`Processing mode changed to: ${preciseMode ? 'Precise' : 'Fast'}`);
+        // Update text styles based on preciseMode
+        const fastText = assertClass(HTMLElement, document.querySelector('.mode-text-fast'));
+        const preciseText = assertClass(HTMLElement, document.querySelector('.mode-text-precise'));
+        if (fastText && preciseText) {
+            if (preciseMode) {
+                fastText.style.fontWeight = 'normal';
+                preciseText.style.fontWeight = 'bold';
+                // preciseText.style.color = '#4CAF50'; // Color is handled by CSS
+            } else {
+                fastText.style.fontWeight = 'bold';
+                // fastText.style.color = '#333'; // Color is handled by CSS
+                preciseText.style.fontWeight = 'normal';
+                // preciseText.style.color = '#333'; // Color is handled by CSS
+            }
+        }
     }
-  });
 });
 
-document.querySelectorAll('input[name="x-axis-scale"]').forEach(radio => {
-  radio.addEventListener('change', (event) => {
+// Event listener for the new scale toggle switch
+scaleToggleInput.addEventListener('change', (event) => {
     if (event.target instanceof HTMLInputElement) {
-        useLogScaleX = event.target.value === 'log';
+        useLogScaleX = event.target.checked; // true if checked (Log), false if not (Linear)
         console.log(`X-axis scale changed to: ${useLogScaleX ? 'Log' : 'Linear'}`);
+        
+        // Update text styles based on useLogScaleX
+        const linearText = assertClass(HTMLElement, document.querySelector('.scale-text-linear'));
+        const logText = assertClass(HTMLElement, document.querySelector('.scale-text-log'));
+        if (linearText && logText) {
+            if (useLogScaleX) {
+                linearText.style.fontWeight = 'normal';
+                logText.style.fontWeight = 'bold';
+            } else {
+                linearText.style.fontWeight = 'bold';
+                logText.style.fontWeight = 'normal';
+            }
+        }
+
         if (lastPlottedVolumes && lastPlottedColors) {
             plotCdf(lastPlottedVolumes, lastPlottedColors);
         }
     }
-  });
 });
 
-// Set initial states from global vars (which should match HTML checked attributes)
-// This ensures consistency if JS loads after HTML or if defaults change.
-modeFastRadio.checked = !preciseMode;
-modePreciseRadio.checked = preciseMode;
-scaleLinRadio.checked = !useLogScaleX;
-scaleLogRadio.checked = useLogScaleX;
+// Set initial states from global vars
+modeToggleInput.checked = preciseMode;
+// Manually trigger the change event to apply initial styles for the mode toggle text
+const modeChangeEvent = new Event('change');
+modeToggleInput.dispatchEvent(modeChangeEvent);
+
+scaleToggleInput.checked = useLogScaleX;
+scaleToggleInput.disabled = true; // Initially disabled until an image is processed
+// Manually trigger the change event to apply initial styles for the scale toggle text
+const scaleChangeEventInitial = new Event('change');
+scaleToggleInput.dispatchEvent(scaleChangeEventInitial);
 
 reset()

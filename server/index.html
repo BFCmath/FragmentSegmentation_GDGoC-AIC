@@ -15,14 +15,6 @@
     </div>
     <div class="container">
       <form id="main" action="#">
-        <div id="left-controls-panel">
-          <div class="radio-group-panel vertical-radio-group">
-            <span class="radio-group-label">Mode:</span>
-            <label><input type="radio" name="processing-mode" id="mode-fast" value="fast" checked> Fast</label>
-            <label><input type="radio" name="processing-mode" id="mode-precise" value="precise"> Precise</label>
-          </div>
-          <button type="button" class="btn" id="clear-btn">Clear</button>
-        </div>
 
         <div class="canvas-container">
           <label>
@@ -119,13 +111,31 @@
               </svg>
             </button>
           </div>
-          
-          <div class="radio-group-panel" id="x-axis-scale-controls-panel" style="display: none;">
-            <span class="radio-group-label">Scale:</span>
-            <label><input type="radio" name="x-axis-scale" id="scale-lin" value="linear" checked> Linear</label>
-            <label><input type="radio" name="x-axis-scale" id="scale-log" value="log"> Log</label>
+          <div id="sidebar-controls-group">
+            <button type="button" class="btn" id="clear-btn">Clear</button>
+            <div class="mode-control-group">
+              <span class="radio-group-label">Mode:</span>
+              <div class="mode-switch-container">
+                <span class="mode-text mode-text-fast">Fast</span>
+                <label class="mode-switch">
+                  <input type="checkbox" id="mode-toggle-input">
+                  <span class="mode-slider"></span>
+                </label>
+                <span class="mode-text mode-text-precise">Precise</span>
+              </div>
+            </div>
+            <div class="scale-control-group" id="x-axis-scale-controls-panel" style="display: none;">
+              <span class="radio-group-label">Scale:</span>
+              <div class="mode-switch-container"> <span class="mode-text scale-text-linear">Linear</span>
+                <label class="mode-switch">
+                  <input type="checkbox" id="scale-toggle-input">
+                  <span class="mode-slider"></span>
+                </label>
+                <span class="mode-text scale-text-log">Log</span>
+              </div>
+            </div>
+            
           </div>
-          
         </div>
       </form>
     </div>
