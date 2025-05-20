@@ -1,3 +1,0 @@
-[submodule "depth"]
-    path = server/utils/depth
-    url = https://github.com/DepthAnything/Depth-Anything-V2
