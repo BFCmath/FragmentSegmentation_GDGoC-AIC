@@ -17,7 +17,7 @@ import torch
 from PIL import Image
 from ultralytics import YOLO
 
-# Import the depth handler
+import config as cfg # Import the new config file
 from utils.depth_handler import DepthHandler
 
 class Config:
@@ -109,7 +109,7 @@ class BaseModelHandler(ABC):
             RuntimeError: If model loading fails
         """
         self.model_path = model_path
-        self.device = Config.DEVICE
+        self.device = cfg.DEVICE # Use from config
         self.logger = logger
         
         # Set random seed for reproducibility
@@ -157,14 +157,14 @@ class BaseModelHandler(ABC):
         # Perform inference
         results = self.model.predict(
             source=processed_input,
-            conf=Config.CONF_THRESHOLD,
-            iou=Config.IOU_THRESHOLD,
-            imgsz=(Config.WIDTH, Config.HEIGHT),
+            conf=cfg.YOLO_CONF_THRESHOLD, # Use from config
+            iou=cfg.YOLO_IOU_THRESHOLD, # Use from config
+            imgsz=(cfg.MODEL_INPUT_WIDTH, cfg.MODEL_INPUT_HEIGHT), # Use from config
             device=self.device,
-            retina_masks=Config.RETINA_MASKS,
-            show_labels=Config.SHOW_LABELS,
-            show_conf=Config.SHOW_CONF,
-            show_boxes=Config.SHOW_BOXES,
+            retina_masks=cfg.YOLO_RETINA_MASKS, # Use from config
+            show_labels=cfg.YOLO_SHOW_LABELS, # Use from config
+            show_conf=cfg.YOLO_SHOW_CONF, # Use from config
+            show_boxes=cfg.YOLO_SHOW_BOXES, # Use from config
             save=False,
             verbose=False
         )
@@ -183,7 +183,7 @@ class BaseModelHandler(ABC):
                 - volumes: List of calculated volumes for each mask
         """
         if prediction is None or not hasattr(prediction, 'masks') or prediction.masks is None:
-            return np.zeros((Config.HEIGHT, Config.WIDTH), dtype=np.uint8), []  # Return an empty mask and empty volumes
+            return np.zeros((cfg.MODEL_INPUT_HEIGHT, cfg.MODEL_INPUT_WIDTH), dtype=np.uint8), []  # Use from config
         
         masks = []
         volumes = []
@@ -209,7 +209,7 @@ class BaseModelHandler(ABC):
                 stacked_img = np.vstack(masks)
                 return stacked_img, volumes
         
-        return np.zeros((Config.HEIGHT, Config.WIDTH), dtype=np.uint8), []  # Return an empty mask and empty volumes
+        return np.zeros((cfg.MODEL_INPUT_HEIGHT, cfg.MODEL_INPUT_WIDTH), dtype=np.uint8), []  # Use from config
 
 class RGBDModelHandler(BaseModelHandler):
     """Handler for RGBD model that combines RGB and depth information."""
@@ -229,7 +229,8 @@ class RGBDModelHandler(BaseModelHandler):
         try:
             # Initialize depth estimation model
             self.logger.info(f'Initializing depth handler with model: {depth_model_path}')
-            self.depth_handler = DepthHandler(depth_model_path, logger)
+            # Pass the depth model type from main config if needed, or let DepthHandler use its default
+            self.depth_handler = DepthHandler(depth_model_path, logger, model_type=cfg.DEPTH_MODEL_TYPE)
             self.logger.info(f'RGBD model initialized successfully')
         except Exception as e:
             self.logger.error(f'Failed to initialize depth model: {str(e)}')
@@ -253,8 +254,8 @@ class RGBDModelHandler(BaseModelHandler):
             image = image_bytes
         
         # Resize if needed
-        if image.size != (Config.WIDTH, Config.HEIGHT):
-            image = image.resize((Config.WIDTH, Config.HEIGHT))
+        if image.size != (cfg.MODEL_INPUT_WIDTH, cfg.MODEL_INPUT_HEIGHT): # Use from config
+            image = image.resize((cfg.MODEL_INPUT_WIDTH, cfg.MODEL_INPUT_HEIGHT)) # Use from config
         
         # Convert to numpy array
         rgb_img = np.array(image)
@@ -300,8 +301,8 @@ class ModelHandler(BaseModelHandler):
             image = image_bytes
             
         # Resize if needed
-        if image.size != (Config.WIDTH, Config.HEIGHT):
-            image = image.resize((Config.WIDTH, Config.HEIGHT))
+        if image.size != (cfg.MODEL_INPUT_WIDTH, cfg.MODEL_INPUT_HEIGHT): # Use from config
+            image = image.resize((cfg.MODEL_INPUT_WIDTH, cfg.MODEL_INPUT_HEIGHT)) # Use from config
             
         # Convert PIL to numpy array
         return np.array(image)
