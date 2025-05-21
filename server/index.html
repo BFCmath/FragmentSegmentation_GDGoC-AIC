@@ -15,16 +15,27 @@
     </div>
     <div class="container">
       <form id="main" action="#">
+
         <div class="canvas-container">
           <label>
             <input type="file" id="file-input" hidden>
             <canvas width="1024" height="768" id="file-display"></canvas>
           </label>
+          <button type="button" class="btn corner-download-btn" id="download-canvas-corner-btn" title="Download Segmented Image" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="1.5em" height="1.5em">
+              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+            </svg>
+          </button>
+          <div id="loader" class="loader-hidden">
+            <div class="spinner"></div>
+            Processing...
+          </div>
         </div>
 
         <div class="sidebar">
-          <div>
-            <svg viewBox="0 0 800 650">
+          <h3>CDF</h3>
+          <div style="position: relative;">
+            <svg viewBox="0 0 800 650" id="cdf-plot-svg">
               <g stroke="#000" stroke-width="2">
                 <line x1="85" y1="550" x2="750" y2="550"/>
                 <line x1="100" y1="0" x2="100" y2="565"/>
@@ -72,7 +83,7 @@
                 <line id="q10-line"></line>
               </g>
 
-              <g fill="#59b6ec" dominant-baseline="hanging">
+              <g fill="#59b6ec" dominant-baseline="middle" text-anchor="start" font-size="16">
                 <text id="q10-text" x="300" y="540"></text>
                 <text id="q50-text" x="200" y="540"></text>
                 <text id="q90-text" x="100" y="540"></text>
@@ -90,11 +101,40 @@
                 <text x="600" y="575">5</text>
                 <text x="700" y="575">6</text>
               </g>
+              
+              <!-- X-axis label -->
+              <text x="425" y="630" text-anchor="middle" font-size="22" font-weight="bold">Volume (pixels^3)</text>
             </svg>
+            <button type="button" class="btn corner-download-btn" id="download-plot-corner-btn" title="Download Plot SVG" disabled>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="1.5em" height="1.5em">
+                <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+              </svg>
+            </button>
           </div>
-          <div class="btn-panel">
-            <input class="btn" type="reset" value="Clear">
-            <label class="btn" id="download-btn">Download</label>
+          <div id="sidebar-controls-group">
+            <button type="button" class="btn" id="clear-btn">Clear</button>
+            <div class="mode-control-group">
+              <span class="radio-group-label">Mode:</span>
+              <div class="mode-switch-container">
+                <span class="mode-text mode-text-fast">Fast</span>
+                <label class="mode-switch">
+                  <input type="checkbox" id="mode-toggle-input">
+                  <span class="mode-slider"></span>
+                </label>
+                <span class="mode-text mode-text-precise">Precise</span>
+              </div>
+            </div>
+            <div class="scale-control-group" id="x-axis-scale-controls-panel" style="display: none;">
+              <span class="radio-group-label">Scale:</span>
+              <div class="mode-switch-container"> <span class="mode-text scale-text-linear">Linear</span>
+                <label class="mode-switch">
+                  <input type="checkbox" id="scale-toggle-input">
+                  <span class="mode-slider"></span>
+                </label>
+                <span class="mode-text scale-text-log">Log</span>
+              </div>
+            </div>
+            
           </div>
         </div>
       </form>

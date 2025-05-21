@@ -56,8 +56,18 @@ html {
   margin: var(--spacing-xl) auto var(--spacing-m) auto;
   gap: var(--spacing-m);
   display: flex;
-  flex-wrap: wrap;
-  align-items: stretch;
+  align-items: flex-start;
+}
+
+#left-controls-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  flex-basis: 200px;
+  flex-shrink: 0;
+  padding: var(--spacing-sm);
+  border: 1px solid #eee;
+  border-radius: var(--spacing-xs);
 }
 
 .canvas-container {
@@ -66,6 +76,7 @@ html {
   min-width: min(100%, 24rem);
   overflow-y: auto;
   margin: 0 auto;
+  position: relative;
 
   &>label {
     display: block;
@@ -83,6 +94,16 @@ html {
 .sidebar {
   flex: 2;
   min-width: min(100%, 24rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.sidebar h3 {
+  margin-top: 0;
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-lg);
+  text-align: center;
 }
 
 .btn-panel {
@@ -99,11 +120,273 @@ html {
   cursor: pointer;
   transition: background 200ms linear;
 
-  &:not([data-disabled]):hover {
+  &:not(:disabled):hover {
     background: #2b8dc1;
   }
 
-  &[data-disabled] {
+  &:disabled {
     color: #5d5d5d;
+    /* Optionally, you might want to revert cursor or add other styles for disabled state */
+    /* cursor: not-allowed; */
+    /* background: #ccc; */ /* Example: different background for disabled */
   }
+}
+
+/* Loader styles */
+.loader-hidden {
+  display: none !important;
+}
+
+#loader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-size: var(--font-lg);
+  color: #333;
+  z-index: 10;
+}
+
+.spinner {
+  border: 8px solid #f3f3f3; /* Light grey */
+  border-top: 8px solid #3498db; /* Blue */
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  animation: spin 1s linear infinite;
+  margin-bottom: var(--spacing-m);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+
+/* Radio Group Panel Styles */
+.radio-group-panel {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.radio-group-panel.vertical-radio-group {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+}
+
+.radio-group-panel.vertical-radio-group .radio-group-label {
+  margin-bottom: var(--spacing-xs);
+}
+
+.radio-group-panel.vertical-radio-group label {
+  width: 100%;
+}
+
+.radio-group-label {
+  font-size: var(--font-sm);
+  font-weight: bold;
+  color: #333;
+}
+
+/* Icon Button styles */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+/* Corner Download Button Styles */
+.corner-download-btn {
+  position: absolute;
+  top: var(--spacing-sm); /* Adjust as needed */
+  right: var(--spacing-sm); /* Adjust as needed */
+  background: transparent;
+  border: none;
+  padding: var(--spacing-xs);
+  cursor: pointer;
+  z-index: 5; /* Ensure it's above canvas/svg but below loader */
+  line-height: 0; /* Helps if the button itself has extra height */
+}
+
+.corner-download-btn svg {
+  fill: #777; /* Default icon color */
+  transition: fill 0.2s ease-in-out;
+}
+
+.corner-download-btn:not(:disabled):hover svg {
+  fill: #000; /* Icon color on hover */
+}
+
+.corner-download-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Ensure .btn base styles don't conflict too much if .btn is still on corner buttons */
+.btn.corner-download-btn {
+    background: transparent; /* Override .btn background */
+    /* Add any other overrides if .btn class is kept and causes issues */
+}
+
+/* Make clear button full width in left panel */
+#left-controls-panel .btn {
+    width: 100%;
+}
+
+/* Style for the Mode radio group when in the sidebar */
+.sidebar .radio-group-panel.vertical-radio-group {
+    flex-direction: row; /* Make Mode selection horizontal */
+    justify-content: center; /* Center items horizontally */
+    align-items: center; /* Align items vertically */
+    padding: var(--spacing-sm) 0; /* Add some padding */
+}
+
+.sidebar .radio-group-panel.vertical-radio-group .radio-group-label {
+  margin-bottom: 0; /* Remove bottom margin from label if it was set for vertical */
+  margin-right: var(--spacing-sm); /* Add right margin to separate label from radios */
+}
+
+.sidebar .radio-group-panel.vertical-radio-group label {
+  width: auto; /* Override width if it was set for vertical */
+}
+
+/* Style for the new group of controls in the sidebar */
+#sidebar-controls-group {
+  border: 0px solid #eee;
+  border-radius: var(--spacing-xs);
+  padding: var(--spacing-m);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs); /* Reduced gap */
+}
+
+/* Adjust Clear button size - remove previous full-width and margin, let flexbox handle it */
+#sidebar-controls-group #clear-btn {
+  width: auto; /* Allow button to size naturally */
+  align-self: flex-start; /* Align to left */
+  /* margin-top is now handled by the gap in sidebar-controls-group */
+}
+
+/* New Mode Toggle Switch Styles */
+.mode-control-group {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start; /* Align to left */
+  gap: 38px;
+  padding: 0;
+}
+
+.mode-switch-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.mode-text {
+  font-size: var(--font-sm);
+  color: #333;
+}
+
+.mode-switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+}
+
+.mode-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.mode-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ffae42; /* Orange for Fast mode (default) */
+  transition: .4s;
+  border-radius: 34px;
+}
+
+.mode-slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .mode-slider {
+  background-color: #4CAF50; /* Green for Precise mode */
+}
+
+input:focus + .mode-slider {
+  box-shadow: 0 0 1px #2196F3;
+}
+
+input:checked + .mode-slider:before {
+  transform: translateX(26px);
+}
+
+/* Style for active text */
+.mode-text-fast {
+  font-weight: bold; /* Default to Fast */
+}
+
+input:checked ~ .mode-text-fast {
+  font-weight: normal;
+}
+
+input:checked ~ .mode-text-precise {
+  font-weight: bold;
+  color: #4CAF50; /* Green color for Precise text when active */
+}
+
+/* Styles for Scale Toggle Switch */
+.scale-control-group {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start; /* Align to left */
+  gap: 25px;
+  padding:  0;
+  /* display: none; is handled inline on the element for initial state */
+}
+
+/* Specific slider color for scale toggle */
+#scale-toggle-input + .mode-slider {
+  background-color: #ccc; /* Default for Linear (grey) */
+}
+
+#scale-toggle-input:checked + .mode-slider {
+  background-color: #007bff; /* Blue for Log */
+}
+
+/* Style for active scale text */
+.scale-text-linear {
+  font-weight: bold; /* Default to Linear */
+}
+
+#scale-toggle-input:checked ~ .scale-text-linear {
+  font-weight: normal;
+}
+
+#scale-toggle-input:checked ~ .scale-text-log {
+  font-weight: bold;
+  color: #007bff; /* Blue color for Log text when active */
 }

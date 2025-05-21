@@ -1,4 +1,9 @@
 // @ts-check
+// Global variable for precise/fast mode toggle
+let preciseMode = false; // Default to Fast
+let useLogScaleX = false; // For X-axis log scale
+let lastPlottedVolumes = null; // To store volumes for replotting
+let lastPlottedColors = null; // To store colors for replotting
 
 /**
  * @param {string} msg
@@ -32,7 +37,15 @@ const vticks = document.querySelector("#cdf-vticks") ?? assertNonNull()
 const lines = document.querySelector("#cdf-lines") ?? assertNonNull()
 const points = document.querySelector("#cdf-points") ?? assertNonNull()
 
-const downloadBtn = document.querySelector("#download-btn") ?? assertNonNull()
+const loader = document.querySelector("#loader") ?? assertNonNull()
+const cdfPlotSvg = assertClass(SVGSVGElement, document.querySelector("#cdf-plot-svg"))
+const downloadCanvasBtn = assertClass(HTMLButtonElement, document.querySelector("#download-canvas-corner-btn"))
+const downloadPlotCornerBtn = assertClass(HTMLButtonElement, document.querySelector("#download-plot-corner-btn"))
+
+// New Radio Button References
+const modeToggleInput = assertClass(HTMLInputElement, document.querySelector("#mode-toggle-input"));
+const scaleToggleInput = assertClass(HTMLInputElement, document.querySelector("#scale-toggle-input"));
+const xAxisScaleControlsPanel = assertClass(HTMLElement, document.querySelector("#x-axis-scale-controls-panel"));
 
 const quantileElems = [
   {
@@ -83,7 +96,14 @@ function clearCdf() {
     elem.line.removeAttribute("x1")
     elem.line.removeAttribute("y1")
     elem.line.removeAttribute("x2")
-    elem.line.removeAttribute("y1")
+    elem.line.removeAttribute("y2")
+
+    // Remove associated background rects
+    const parentG = elem.text.parentElement;
+    if (parentG) {
+      const rectsToRemove = parentG.querySelectorAll('.quantile-text-background');
+      rectsToRemove.forEach(rect => parentG.removeChild(rect));
+    }
   }
 }
 
@@ -147,117 +167,219 @@ function randomColor(count) {
 
 /**
  * @param {Float64Array} volumes
+ * @param {Uint8ClampedArray} colors
  */
-function plotCdf(volumes) {
-  volumes.sort()
-
-  const min = volumes[0]
-  const max = volumes[volumes.length - 1]
-
-  // Draw number on horizontal ticks
-  const children = vticks.children
-  let tick = min
-  const inc = (max - min) / (children.length - 1)
-  for (const child of children) {
-    child.textContent = tick.toFixed(0)
-    tick += inc
+function plotCdf(volumes, colors) {
+  if (!volumes || volumes.length === 0) {
+    // Clear plot elements if no volumes
+    while (points.lastElementChild) points.removeChild(points.lastElementChild);
+    lines.removeAttribute("d");
+    for (const elem of quantileElems) {
+      elem.text.textContent = "";
+      elem.line.removeAttribute("x1");
+      elem.line.removeAttribute("y1");
+      elem.line.removeAttribute("x2");
+      elem.line.removeAttribute("y2");
+      const parentG = elem.text.parentElement;
+      if (parentG) {
+        const rectsToRemove = parentG.querySelectorAll('.quantile-text-background');
+        rectsToRemove.forEach(rect => parentG.removeChild(rect));
+      }
+    }
+    const children = vticks.children;
+    for (const child of children) child.textContent = "-";
+    return;
   }
 
-  while (points.childElementCount) {
-    throw new Error("CDF plot is not empty")
-  }
+  // 1. Create an array of objects to hold original and display values
+  const plotData = Array.from(volumes).map(v => ({
+    originalValue: v,
+    displayValue: useLogScaleX ? Math.log10(Math.max(v, 1)) : v
+  }));
 
-  const yDec = 500 / volumes.length
-  let y = 550
+  // 2. Sort this array based on displayValue
+  plotData.sort((a, b) => a.displayValue - b.displayValue);
 
-  // Compute the points of the CDF plot
-  const xs = new Float64Array(volumes.length + 2)
-  const ys = new Float64Array(volumes.length + 2)
-  let idx = 1
+  const minDisplayValue = plotData[0].displayValue;
+  const maxDisplayValue = plotData[plotData.length - 1].displayValue;
 
-  let q_idx = 0
-  for (const area of volumes) {
-    y -= yDec
-    const x = (area - min) * 600 / (max - min) + 100
-    if (idx > 0 && x == xs[idx - 1]) {
-      ys[idx - 1] = y
+  // 3. Update X-axis tick labels
+  const tickElements = vticks.children;
+  const numTicks = tickElements.length;
+  for (let i = 0; i < numTicks; ++i) {
+    const tickElement = tickElements[i];
+    let tickValue;
+    if (maxDisplayValue === minDisplayValue) {
+        tickValue = useLogScaleX ? Math.pow(10, minDisplayValue) : minDisplayValue;
     } else {
-      xs[idx] = x
-      ys[idx] = y
-      idx += 1
+        const proportion = i / (numTicks - 1);
+        const currentDisplayValue = minDisplayValue + proportion * (maxDisplayValue - minDisplayValue);
+        tickValue = useLogScaleX ? Math.pow(10, currentDisplayValue) : currentDisplayValue;
     }
 
+    let notationOptions = {}; // Initialize as an empty object
+    if (tickValue >= 1000 && tickValue < 1e7) { // 1,000 up to 10,000,000 (exclusive)
+        notationOptions = {
+            notation: 'compact',
+            compactDisplay: 'short',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: (tickValue % (tickValue >= 1e6 ? 1e6 : 1e3) === 0) ? 0 : 1
+        };
+    } else if (tickValue >= 1e7) { // 10,000,000 and above
+        notationOptions = {
+            notation: 'scientific',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 1 
+        };
+    } else { // Less than 1,000
+        notationOptions = {
+            notation: 'standard',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: (tickValue < 100 && tickValue !== Math.floor(tickValue)) ? 2 : 0
+        };
+    }
+    tickElement.textContent = tickValue.toLocaleString(undefined, notationOptions);
+  }
+  
+  // Clear previous dynamic plot elements (points, main line, quantile backgrounds)
+  while (points.lastElementChild) points.removeChild(points.lastElementChild);
+  lines.removeAttribute("d");
+  quantileElems.forEach(qe => {
+    const parentG = qe.text.parentElement;
+    if (parentG) {
+        const rectsToRemove = parentG.querySelectorAll('.quantile-text-background');
+        rectsToRemove.forEach(rect => parentG.removeChild(rect));
+    }
+  });
+
+  const yDec = 500 / plotData.length;
+  let y = 550;
+
+  const xs = new Float64Array(plotData.length + 2);
+  const ys = new Float64Array(plotData.length + 2);
+  let distinctPointsIdx = 1; // Index for xs, ys (distinct points for drawing curve)
+
+  let q_idx = 0;
+  // Iterate through the sorted plotData for CDF points and quantile calculations
+  for (let i = 0; i < plotData.length; ++i) {
+    const dataPoint = plotData[i];
+    y -= yDec;
+    
+    const x = (dataPoint.displayValue - minDisplayValue) * 600 / (maxDisplayValue - minDisplayValue) + 100;
+
+    if (distinctPointsIdx > 0 && x === xs[distinctPointsIdx - 1]) {
+      ys[distinctPointsIdx - 1] = y; // Update y for vertical segments
+    } else {
+      xs[distinctPointsIdx] = x;
+      ys[distinctPointsIdx] = y;
+      distinctPointsIdx += 1;
+    }
+
+    // Quantile logic (using originalValue for text)
     if (q_idx < quantileElems.length && y < quantileElems[q_idx].y) {
-      const { line, text, prefix } = quantileElems[q_idx]
-      line.setAttribute("x1", x.toString())
-      line.setAttribute("x2", x.toString())
-      line.setAttribute("y1", y.toString())
-      line.setAttribute("y2", "550")
+      const { line, text, prefix } = quantileElems[q_idx];
+      line.setAttribute("x1", x.toString());
+      line.setAttribute("x2", x.toString());
+      line.setAttribute("y1", y.toString());
+      line.setAttribute("y2", "550");
 
-      text.textContent = `${prefix} = ${area.toFixed(2)}`
-      text.setAttribute("x", (x + 10).toString())
-      text.setAttribute("transform", `rotate(-90 ${x + 10} 540)`)
-      ++q_idx
+      text.textContent = `${prefix} = ${dataPoint.originalValue.toFixed(2)}`;
+      text.setAttribute("y", y.toString());
+      text.setAttribute("x", (x + 25).toString());
+      
+      const bgRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      bgRect.setAttribute("x", (x + 22).toString());
+      bgRect.setAttribute("y", (y - 10).toString());
+      bgRect.setAttribute("width", "100"); 
+      bgRect.setAttribute("height", "20");
+      bgRect.setAttribute("fill", "white");
+      bgRect.setAttribute("fill-opacity", "0.7");
+      bgRect.setAttribute("class", "quantile-text-background"); 
+      const parent = text.parentElement;
+      if (parent) parent.insertBefore(bgRect, text);
+      
+      ++q_idx;
     }
   }
 
-  // Draw the points
-  for (let i = 1; i < idx; ++i) {
-    // TODO: Fill each point with their respective color
-    const elem = document.createElementNS("http://www.w3.org/2000/svg", "circle")
-    elem.setAttribute("cx", xs[i].toString())
-    elem.setAttribute("cy", ys[i].toString())
-    elem.setAttribute("r", "3")
-    points.appendChild(elem)
+  // Draw the CDF points
+  for (let i = 1; i < distinctPointsIdx; ++i) {
+    const elem = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    elem.setAttribute("cx", xs[i].toString());
+    elem.setAttribute("cy", ys[i].toString());
+    elem.setAttribute("r", "3");
+    
+    // Color mapping needs to be considered carefully if plotData was re-sorted.
+    // If colors correspond to the original unsorted `volumes` array:
+    // We need to find original index of plotData[i-1].originalValue in `volumes` to pick the right color.
+    // For now, to keep it simpler, let's color based on the sorted order of plotData.
+    // This means the (i-1)-th point in the sorted plot gets the (i-1)-th color.
+    if (colors && (i-1) < colors.length / 3 ) {
+      const colorIndex = (i-1) * 3; 
+      const r_val = colors[colorIndex];
+      const g_val = colors[colorIndex + 1];
+      const b_val = colors[colorIndex + 2];
+      elem.setAttribute("fill", `rgb(${r_val},${g_val},${b_val})`);
+    } else {
+      elem.setAttribute("fill", "black"); 
+    }
+    points.appendChild(elem);
   }
 
-  if (idx <= 2) return
-
-  // Define extra points at the start and end for interpolation
-  xs[0] = 2 * xs[1] - xs[2]
-  ys[0] = 2 * ys[1] - ys[2]
-  xs[idx] = xs[idx - 1] * 2 - xs[idx - 2]
-  ys[idx] = ys[idx - 1] * 2 - ys[idx - 2]
-
-
-  // Draw the approximation line
-  const sx = (xs[0] + 4 * xs[1] + xs[2]) / 6
-  const sy = (ys[0] + 4 * ys[1] + ys[2]) / 6
-  let d = `M ${sx} ${sy}\n`
-
-  for (let i = 2; i < idx; ++i) {
-    const c1x = (4 * xs[i - 1] + 2 * xs[i]) / 6
-    const c1y = (4 * ys[i - 1] + 2 * ys[i]) / 6
-
-    const c2x = (2 * xs[i - 1] + 4 * xs[i]) / 6
-    const c2y = (2 * ys[i - 1] + 4 * ys[i]) / 6
-
-    const nx = (xs[i - 1] + 4 * xs[i] + xs[i + 1]) / 6
-    const ny = (ys[i - 1] + 4 * ys[i] + ys[i + 1]) / 6
-    d += `C ${c1x} ${c1y} ${c2x} ${c2y} ${nx} ${ny}\n`
+  if (distinctPointsIdx <= 2) {
+    lines.removeAttribute("d"); // Clear path if not enough points
+    return;
   }
 
-  lines.setAttribute("d", d)
+  xs[0] = 2 * xs[1] - xs[2];
+  ys[0] = 2 * ys[1] - ys[2];
+  xs[distinctPointsIdx] = xs[distinctPointsIdx - 1] * 2 - xs[distinctPointsIdx - 2];
+  ys[distinctPointsIdx] = ys[distinctPointsIdx - 1] * 2 - ys[distinctPointsIdx - 2];
+
+  const sx = (xs[0] + 4 * xs[1] + xs[2]) / 6;
+  const sy = (ys[0] + 4 * ys[1] + ys[2]) / 6;
+  let d_path = `M ${sx} ${sy}\n`;
+
+  for (let i = 2; i < distinctPointsIdx; ++i) {
+    const c1x = (4 * xs[i - 1] + 2 * xs[i]) / 6;
+    const c1y = (4 * ys[i - 1] + 2 * ys[i]) / 6;
+    const c2x = (2 * xs[i - 1] + 4 * xs[i]) / 6;
+    const c2y = (2 * ys[i - 1] + 4 * ys[i]) / 6;
+    const nx = (xs[i - 1] + 4 * xs[i] + xs[i + 1]) / 6;
+    const ny = (ys[i - 1] + 4 * ys[i] + ys[i + 1]) / 6;
+    d_path += `C ${c1x} ${c1y} ${c2x} ${c2y} ${nx} ${ny}\n`;
+  }
+  lines.setAttribute("d", d_path);
 }
 
 /**
  * @param {Blob} blob
+ * @param {number} sendTime
+ * @param {number[]} [serverVolumes] - Volume data from server response
  */
-function displayMask(blob) {
+function displayMask(blob, sendTime, serverVolumes) {
+  const receiveTime = performance.now();
+  console.log(`Time to receive response from server: ${(receiveTime - sendTime).toFixed(2)}ms`);
+  
   const img = new Image()
   const src = URL.createObjectURL(blob)
 
   img.addEventListener("load", () => {
+    const loadTime = performance.now();
+    console.log(`Time to load mask image: ${(loadTime - receiveTime).toFixed(2)}ms`);
+    
     const count = (img.height / img.width) >>> 0
     const colors = randomColor(count)
 
+    // Set dimensions only once
     offscreenCanvas.width = canvas.width
     offscreenCanvas.height = canvas.height
 
+    // Get source image data once
     const imgdata = ctx.getImageData(0, 0, canvas.width, canvas.height)
     const datalen = imgdata.data.length
 
-    const volumes = new Float64Array(count)
+    const volumes = serverVolumes ? new Float64Array(serverVolumes) : new Float64Array(count)
 
     let sy = 0
     for (let i = 0; i < count; ++i) {
@@ -278,15 +400,30 @@ function displayMask(blob) {
         }
       }
 
-
-      // areas[i] = Math.sqrt(pixelCount / Math.PI)
-      volumes[i] = 4/3 * Math.pow(pixelCount / Math.PI, 3/2)
+      if (!serverVolumes) {
+        volumes[i] = 4/3 * Math.pow(pixelCount / Math.PI, 3/2)
+      }
       sy += img.width
     }
 
-    plotCdf(volumes)
+    lastPlottedVolumes = Float64Array.from(volumes); // Store a copy of original volumes
+    lastPlottedColors = Uint8ClampedArray.from(colors); // Store a copy of colors
+
+    plotCdf(lastPlottedVolumes, lastPlottedColors)
     ctx.putImageData(imgdata, 0, 0)
-    downloadBtn.removeAttribute("data-disabled")
+    downloadCanvasBtn.disabled = false;
+    downloadPlotCornerBtn.disabled = false;
+    xAxisScaleControlsPanel.style.display = 'flex'; // Show X-axis scale controls
+    scaleToggleInput.disabled = false;
+    loader.classList.add("loader-hidden"); 
+    
+    const renderTime = performance.now();
+    console.log(`Time to render results: ${(renderTime - loadTime).toFixed(2)}ms`);
+    console.log(`Total time from send to complete render: ${(renderTime - sendTime).toFixed(2)}ms`);
+
+    // Enable scale toggle and set its initial state (after processing)
+    scaleToggleInput.disabled = false;
+    xAxisScaleControlsPanel.style.display = 'flex'; // Show X-axis scale controls
 
     URL.revokeObjectURL(src)
   })
@@ -294,12 +431,55 @@ function displayMask(blob) {
   img.src = src
 }
 
+// --- Download Functionality ---
+
+/**
+ * Downloads the content of the main canvas as a PNG image.
+ */
+function downloadCanvasImage() {
+  if (canvas.width === 0 || canvas.height === 0 || downloadCanvasBtn.disabled) {
+    console.warn("Canvas is empty or download is disabled.");
+    return;
+  }
+  const dataURL = canvas.toDataURL("image/png");
+  const link = document.createElement("a");
+  link.href = dataURL;
+  link.download = "segmented_image.png";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+/**
+ * Downloads the CDF plot as an SVG file.
+ */
+function downloadPlotSVG() {
+  if (downloadPlotCornerBtn.disabled) {
+    console.warn("Plot download is disabled.");
+    return;
+  }
+  const serializer = new XMLSerializer();
+  const svgString = serializer.serializeToString(cdfPlotSvg);
+  const dataURL = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgString);
+  const link = document.createElement("a");
+  link.href = dataURL;
+  link.download = "cdf_plot.svg";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// Add event listeners for download buttons
+downloadCanvasBtn.addEventListener("click", downloadCanvasImage);
+downloadPlotCornerBtn.addEventListener("click", downloadPlotSVG);
+
 /**
  * @param {File} file
  * Process the image file when the user uploaded or pasted
  */
 function processFile(file) {
   clearCdf()
+  loader.classList.remove("loader-hidden");
 
   // Convert to HTMLImageElement and send to canvas
   const reader = new FileReader()
@@ -325,13 +505,25 @@ function processFile(file) {
 
         const formdata = new FormData()
         formdata.append("file", blob, "input.png")
-
-        const resp = await fetch("/predict", {
+        
+        const sendTime = performance.now();          
+        console.log(`Sending image to server using RGBD model in ${preciseMode ? 'precise' : 'fast'} mode...`);
+        const endpoint = `/predict?use_depth=${preciseMode ? 'precise' : 'fast'}`
+        const resp = await fetch(endpoint, {
           method: "POST",
           body: formdata,
-        })
-
-        displayMask(await resp.blob())
+        })        
+        const jsonResponse = await resp.json();
+        
+        if (!jsonResponse.success) {
+          console.error("Error from server:", jsonResponse.error);
+          alert(`Error processing image: ${jsonResponse.error}`);
+          loader.classList.add("loader-hidden");
+          return;
+        }
+        
+        const imgBlob = await fetch(jsonResponse.image_data).then(r => r.blob());
+        displayMask(imgBlob, sendTime, jsonResponse.volumes)
       }, "image/png")
     })
     img.src = src
@@ -365,11 +557,86 @@ document.addEventListener("paste", e => {
 function reset() {
   clearCdf()
   drawPrompt()
-  downloadBtn.setAttribute("data-disabled", "disabled")
+  downloadCanvasBtn.disabled = true;
+  downloadPlotCornerBtn.disabled = true;
+  fileInput.value = "";
+  lastPlottedVolumes = null;
+  lastPlottedColors = null;
+  xAxisScaleControlsPanel.style.display = 'none'; // Hide X-axis scale controls
+  scaleToggleInput.disabled = true; // Disable scale toggle on reset
+  // Ensure scale toggle is reset to Linear (unchecked)
+  scaleToggleInput.checked = false;
+  const scaleChangeEventInitial = new Event('change'); // Dispatch change to update text styles
+  scaleToggleInput.dispatchEvent(scaleChangeEventInitial);
+  
+  plotCdf(new Float64Array(), new Uint8ClampedArray()); // Call with empty typed arrays
 }
 
 const form = assertClass(HTMLFormElement, document.querySelector("#main"))
 form.addEventListener("submit", e => e.preventDefault())
-form.addEventListener("reset", reset)
+
+// Add event listener for the new Clear button
+const clearBtn = assertClass(HTMLButtonElement, document.querySelector('#clear-btn'));
+clearBtn.addEventListener('click', reset);
+
+// Event listener for the new mode toggle switch
+modeToggleInput.addEventListener('change', (event) => {
+    if (event.target instanceof HTMLInputElement) {
+        preciseMode = event.target.checked; // true if checked (Precise), false if not (Fast)
+        console.log(`Processing mode changed to: ${preciseMode ? 'Precise' : 'Fast'}`);
+        // Update text styles based on preciseMode
+        const fastText = assertClass(HTMLElement, document.querySelector('.mode-text-fast'));
+        const preciseText = assertClass(HTMLElement, document.querySelector('.mode-text-precise'));
+        if (fastText && preciseText) {
+            if (preciseMode) {
+                fastText.style.fontWeight = 'normal';
+                preciseText.style.fontWeight = 'bold';
+                // preciseText.style.color = '#4CAF50'; // Color is handled by CSS
+            } else {
+                fastText.style.fontWeight = 'bold';
+                // fastText.style.color = '#333'; // Color is handled by CSS
+                preciseText.style.fontWeight = 'normal';
+                // preciseText.style.color = '#333'; // Color is handled by CSS
+            }
+        }
+    }
+});
+
+// Event listener for the new scale toggle switch
+scaleToggleInput.addEventListener('change', (event) => {
+    if (event.target instanceof HTMLInputElement) {
+        useLogScaleX = event.target.checked; // true if checked (Log), false if not (Linear)
+        console.log(`X-axis scale changed to: ${useLogScaleX ? 'Log' : 'Linear'}`);
+        
+        // Update text styles based on useLogScaleX
+        const linearText = assertClass(HTMLElement, document.querySelector('.scale-text-linear'));
+        const logText = assertClass(HTMLElement, document.querySelector('.scale-text-log'));
+        if (linearText && logText) {
+            if (useLogScaleX) {
+                linearText.style.fontWeight = 'normal';
+                logText.style.fontWeight = 'bold';
+            } else {
+                linearText.style.fontWeight = 'bold';
+                logText.style.fontWeight = 'normal';
+            }
+        }
+
+        if (lastPlottedVolumes && lastPlottedColors) {
+            plotCdf(lastPlottedVolumes, lastPlottedColors);
+        }
+    }
+});
+
+// Set initial states from global vars
+modeToggleInput.checked = preciseMode;
+// Manually trigger the change event to apply initial styles for the mode toggle text
+const modeChangeEvent = new Event('change');
+modeToggleInput.dispatchEvent(modeChangeEvent);
+
+scaleToggleInput.checked = useLogScaleX;
+scaleToggleInput.disabled = true; // Initially disabled until an image is processed
+// Manually trigger the change event to apply initial styles for the scale toggle text
+const scaleChangeEventInitial = new Event('change');
+scaleToggleInput.dispatchEvent(scaleChangeEventInitial);
 
 reset()

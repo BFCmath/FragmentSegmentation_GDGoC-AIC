@@ -1,7 +1,21 @@
+# Specify PyTorch CPU index to ensure CPU-only version is prioritized
+--index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://pypi.org/simple
+
+# API dependencies
 fastapi==0.103.1
 uvicorn==0.23.2
-python-multipart==0.0.6
+python-multipart
+
+# Machine learning dependencies
 torch==2.0.1
+onnxruntime==1.17.1 # For ONNX model inference
+opencv-python-headless==4.8.1.78
 torchvision==0.15.2
+# Image processing
 pillow==10.0.1
 numpy==1.24.3
+
+# UI dependencies
+gradio==4.29.0
+gradio_imageslider
