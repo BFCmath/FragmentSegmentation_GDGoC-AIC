@@ -26,14 +26,6 @@ from PIL import Image
 from model import ModelHandler, RGBDModelHandler
 import config as cfg
 
-
-# Configuration constants
-# ALLOWED_CONTENT_TYPES = ['image/jpeg', 'image/png'] # Moved to config.py
-# RGB_WEIGHT_PATH = '../weights/yolo_rgb_{}.pt' # Moved to config.py
-# RGBD_WEIGHT_PATH = '../weights/yolo_rgbd_{}.pt' # Moved to config.py
-# DEPTH_MODEL_PATH = '../weights/depth_anything_v2_vits.pth' # Moved to config.py
-
-
 def homepage() -> HTMLResponse:
     """Return the HTML homepage for the application."""
     with open('index.html', 'r') as f:

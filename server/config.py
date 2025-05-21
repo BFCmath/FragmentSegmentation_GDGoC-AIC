@@ -6,14 +6,11 @@ DEV_MODE = True  # Set to True for development, overridden by ENV var
 PORT = 3000
 
 # --- Model Paths ---
-# These paths are relative to the server directory root
-# Ensure weights are structured as server/weights/...
-RGB_WEIGHT_PATH_TEMPLATE = '../weights/yolo_rgb_{}.pt'
-RGBD_WEIGHT_PATH_TEMPLATE = '../weights/yolo_rgbd_{}.pt'
-DEPTH_MODEL_PATH_TEMPLATE = '../weights/depth_anything_v2_{}.pth' # e.g., vits, vitb
+RGB_WEIGHT_PATH_TEMPLATE = '../weights/yolo_rgb_{}.onnx'
+RGBD_WEIGHT_PATH_TEMPLATE = '../weights/yolo_rgbd_{}.onnx'
+DEPTH_MODEL_PATH_TEMPLATE = '../weights/depth_anything_v2_{}.pth' 
 
 # --- Model Parameters ---
-# YOLO Model Configs
 YOLO_CONF_THRESHOLD = 0.25
 YOLO_IOU_THRESHOLD = 0.7
 YOLO_RETINA_MASKS = True

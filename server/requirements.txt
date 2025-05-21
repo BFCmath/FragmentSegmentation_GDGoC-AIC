@@ -5,8 +5,7 @@ python-multipart
 
 # Machine learning dependencies
 torch==2.0.1
-torchvision==0.15.2
-ultralytics==8.0.196
+onnxruntime==1.17.1 # For ONNX model inference
 opencv-python==4.8.1.78
 
 # Image processing
