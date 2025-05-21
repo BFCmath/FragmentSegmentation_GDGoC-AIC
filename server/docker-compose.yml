@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - LOG_TO_STDOUT=true
+      - LOG_LEVEL=INFO
+      - DEV=false
+    volumes:
+      - ./weights:/app/weights
+    restart: unless-stopped 

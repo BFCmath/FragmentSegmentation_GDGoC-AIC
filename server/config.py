@@ -1,14 +1,12 @@
-import torch
-
 # --- Application Settings ---
 ALLOWED_CONTENT_TYPES = ['image/jpeg', 'image/png']
 DEV_MODE = True  # Set to True for development, overridden by ENV var
 PORT = 3000
 
 # --- Model Paths ---
-RGB_WEIGHT_PATH_TEMPLATE = '../weights/yolo_rgb_{}.onnx'
-RGBD_WEIGHT_PATH_TEMPLATE = '../weights/yolo_rgbd_{}.onnx'
-DEPTH_MODEL_PATH_TEMPLATE = '../weights/depth_anything_v2_{}.pth' 
+RGB_WEIGHT_PATH_TEMPLATE = 'weights/yolo_rgb_{}.onnx'
+RGBD_WEIGHT_PATH_TEMPLATE = 'weights/yolo_rgbd_{}.onnx'
+DEPTH_MODEL_PATH_TEMPLATE = 'weights/depth_anything_v2_{}.pth' 
 
 # --- Model Parameters ---
 YOLO_CONF_THRESHOLD = 0.25
@@ -23,7 +21,7 @@ MODEL_INPUT_WIDTH = 512
 MODEL_INPUT_HEIGHT = 512
 
 # --- Device Settings ---
-DEVICE = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
+DEVICE = 'cpu'
 
 # --- Depth Model Specific Configs ---
 # Options: 'vits', 'vitb', 'vitl', 'vitg'

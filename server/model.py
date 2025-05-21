@@ -13,7 +13,6 @@ from typing import List, Tuple, Union
 
 import cv2
 import numpy as np
-import torch
 from PIL import Image
 import onnxruntime
 
@@ -29,7 +28,7 @@ class Config:
     RETINA_MASKS = True
     
     # Device settings
-    DEVICE = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
+    DEVICE = 'cpu'
 
     # Image dimensions
     WIDTH = 512
@@ -126,7 +125,6 @@ class BaseModelHandler(ABC):
         self.device = cfg.DEVICE 
         
         # Set random seed for reproducibility
-        torch.manual_seed(40) # Still useful if any torch ops remain or for consistency
         np.random.seed(40)
         random.seed(40)
         
