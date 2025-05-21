@@ -32,7 +32,7 @@ The server requires pre-trained model weights to function.
 **Download the weights:**
 
 Please download the necessary model files from the following link:
-[EneoPi Weights](https://drive.google.com/drive/folders/1REDe3jkkYV856jkzJiQ5LFVdSxQ5qXeQ?usp=sharing)
+[EnEoPi Weights](https://drive.google.com/drive/folders/1REDe3jkkYV856jkzJiQ5LFVdSxQ5qXeQ?usp=sharing)
 
 **Place the weights:**
 
