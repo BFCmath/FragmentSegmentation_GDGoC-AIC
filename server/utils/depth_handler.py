@@ -14,28 +14,8 @@ import numpy as np
 import torch
 from PIL import Image
 
+import config as cfg # Import the main config
 from utils.depth_anything_v2.dpt import DepthAnythingV2
-
-
-class Config:
-    """Configuration settings for depth estimation model."""
-    
-    MODEL_TYPE = 'vits'  # Small model (options: vits, vitb, vitl, vitg)
-    
-    # Device settings
-    DEVICE = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
-    
-    # Image dimensions
-    WIDTH = 512
-    HEIGHT = 512
-    
-    # Model configurations
-    MODEL_CONFIGS = {
-        'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]},
-        'vitb': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768]},
-        'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]},
-        'vitg': {'encoder': 'vitg', 'features': 384, 'out_channels': [1536, 1536, 1536, 1536]}
-    }
 
 
 def get_model(model_path: str, model_type: str = 'vits') -> DepthAnythingV2:
@@ -53,9 +33,10 @@ def get_model(model_path: str, model_type: str = 'vits') -> DepthAnythingV2:
         RuntimeError: If model loading fails
     """
     try:
-        model = DepthAnythingV2(**Config.MODEL_CONFIGS[model_type])
+        # Use MODEL_CONFIGS and DEVICE from the main config
+        model = DepthAnythingV2(**cfg.DEPTH_MODEL_CONFIGS[model_type])
         model.load_state_dict(torch.load(model_path, map_location='cpu'))
-        model = model.to(Config.DEVICE).eval()
+        model = model.to(cfg.DEVICE).eval() # Use DEVICE from main config
         return model
     except Exception as e:
         raise RuntimeError(f"Error loading Depth Anything model: {e}")
@@ -64,14 +45,14 @@ def get_model(model_path: str, model_type: str = 'vits') -> DepthAnythingV2:
 class DepthHandler:
     """Handles depth estimation using Depth Anything V2 model."""
     
-    def __init__(self, model_path: str, logger, model_type: str = 'vits'):
+    def __init__(self, model_path: str, logger, model_type: str = cfg.DEPTH_MODEL_TYPE):
         """
         Initialize the Depth Anything model handler.
         
         Args:
             model_path: Path to Depth Anything model weights file (.pth)
             logger: Logger instance for recording events
-            model_type: Type of model (vits, vitb, vitl, vitg)
+            model_type: Type of model (e.g., 'vits', 'vitb'), defaults to cfg.DEPTH_MODEL_TYPE
             
         Raises:
             FileNotFoundError: If model file doesn't exist
@@ -79,7 +60,7 @@ class DepthHandler:
         """
         self.model_path = model_path
         self.model_type = model_type
-        self.device = Config.DEVICE
+        self.device = cfg.DEVICE # Use DEVICE from main config
         
         try:
             if not os.path.exists(self.model_path):
@@ -147,7 +128,7 @@ class DepthHandler:
             Processed depth map ready for visualization
         """
         if depth_map is None:
-            return np.zeros((Config.HEIGHT, Config.WIDTH), dtype=np.uint8)
+            return np.zeros((cfg.MODEL_INPUT_HEIGHT, cfg.MODEL_INPUT_WIDTH), dtype=np.uint8) # Use from config
         
         if normalize:
             # Normalize to 0-255 range

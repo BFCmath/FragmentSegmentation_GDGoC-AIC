@@ -24,14 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from model import ModelHandler, RGBDModelHandler
-
-
-# Configuration constants
-ALLOWED_CONTENT_TYPES = ['image/jpeg', 'image/png']
-RGB_WEIGHT_PATH = '../weights/yolo_rgb_{}.pt'
-RGBD_WEIGHT_PATH = '../weights/yolo_rgbd_{}.pt'
-DEPTH_MODEL_PATH = '../weights/depth_anything_v2_vits.pth'
-
+import config as cfg
 
 def homepage() -> HTMLResponse:
     """Return the HTML homepage for the application."""
@@ -49,11 +42,11 @@ async def lifespan(app: FastAPI):
     """
     # Configure logging
     logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
+        level=cfg.LOG_LEVEL,
+        format=cfg.LOG_FORMAT,
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler('api.log')
+            logging.FileHandler(cfg.LOG_FILE)
         ]
     )
     app.state.logger = logging.getLogger(__name__)
@@ -65,18 +58,19 @@ async def lifespan(app: FastAPI):
     try:
         # Initialize RGB model
         app.state.model_handler = ModelHandler(
-            RGB_WEIGHT_PATH.format(version_type), 
+            cfg.RGB_WEIGHT_PATH_TEMPLATE.format(version_type),
             app.state.logger
         )
         app.state.logger.info(f'Server successfully started with YOLO RGB {version_type} model')
         
         # Initialize RGBD model
+        depth_model_filename = cfg.DEPTH_MODEL_PATH_TEMPLATE.format(cfg.DEPTH_MODEL_TYPE)
         app.state.rgbd_model_handler = RGBDModelHandler(
-            RGBD_WEIGHT_PATH.format(version_type), 
-            DEPTH_MODEL_PATH, 
+            cfg.RGBD_WEIGHT_PATH_TEMPLATE.format(version_type),
+            depth_model_filename, # Use the constructed path
             app.state.logger
         )
-        app.state.logger.info(f'RGBD model loaded successfully')
+        app.state.logger.info(f'RGBD model loaded successfully with depth model: {depth_model_filename}')
     except Exception as e:
         app.state.logger.error(f"Failed to initialize models: {e}")
         raise
@@ -85,6 +79,25 @@ async def lifespan(app: FastAPI):
     
     app.state.logger.info('Server shutting down...')
 
+
+def _validate_file(file: UploadFile) -> Optional[JSONResponse]:
+    """Validate uploaded file type and content."""
+    if file.content_type not in cfg.ALLOWED_CONTENT_TYPES:
+        return JSONResponse(
+            status_code=415,
+            content={
+                "success": False,
+                "error": f'Invalid file type: {file.content_type}. Only JPEG and PNG are supported.'
+            }
+        )
+    return None
+
+async def _read_file_contents(file: UploadFile) -> Optional[bytes]:
+    """Read file contents. Returns None if file is empty."""
+    contents = await file.read()
+    if not contents:
+        return None
+    return contents
 
 async def process_image(req: Request, file: UploadFile, use_depth: bool = False):
     """
@@ -100,31 +113,22 @@ async def process_image(req: Request, file: UploadFile, use_depth: bool = False)
     """
     logger: logging.Logger = req.app.state.logger
 
-    # Select the appropriate model handler
     model_handler = req.app.state.rgbd_model_handler if use_depth else req.app.state.model_handler
     model_type = "RGBD" if use_depth else f"YOLO {req.app.state.version_type}"
     logger.info(f'Incoming request {req.client} using {model_type} model')
 
     start_time = time.time()
 
-    try:       
-        if file.content_type not in ALLOWED_CONTENT_TYPES:
-            return JSONResponse(
-                status_code=415,  # Changed to correct status code for unsupported media type
-                content={
-                    "success": False,
-                    "error": f'Invalid file type: {file.content_type}. Only JPEG and PNG are supported.'
-                }
-            )
-        
-        contents = await file.read()
-        if not contents:
+    try:
+        validation_response = _validate_file(file)
+        if validation_response:
+            return validation_response
+
+        contents = await _read_file_contents(file)
+        if contents is None:
             return JSONResponse(
                 status_code=400,
-                content={
-                    "success": False,
-                    "error": "Empty file received"
-                }            
+                content={"success": False, "error": "Empty file received"}
             )
             
         predictions = model_handler.predict(contents)
@@ -149,7 +153,7 @@ async def process_image(req: Request, file: UploadFile, use_depth: bool = False)
         
     except Exception as e:
         logger.error(f'Failed to process {req.client} with {model_type} model: {e}')
-        if use_depth:
+        if use_depth: # Log traceback for RGBD failures, as they can be more complex
             import traceback
             logger.error(traceback.format_exc())
 
@@ -217,8 +221,8 @@ def make_app(is_dev: bool = False) -> FastAPI:
 
 
 # App configuration from environment variables
-dev = env.get('DEV') is not None
-port = int(env.get('PORT', default='3000'))
+dev = env.get('DEV') is not None or cfg.DEV_MODE
+port = int(env.get('PORT', default=str(cfg.PORT)))
 
 app = make_app(dev)
 

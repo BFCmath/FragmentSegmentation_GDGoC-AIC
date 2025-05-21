@@ -1,0 +1,19 @@
+# Python specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+.venv/
+env/
+.env/
+
+# Git folder
+.git/
+.gitignore
+
+api.log
+
+weights/

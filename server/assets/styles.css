@@ -168,84 +168,6 @@ html {
   100% { transform: rotate(360deg); }
 }
 
-/* Mode Switch styles - REMOVED as replaced by radio buttons */
-/*
-.mode-switch-panel {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.mode-text {
-  font-size: var(--font-sm);
-  color: #333;
-}
-
-.mode-switch {
-  position: relative;
-  display: inline-block;
-  width: 60px;
-  height: 34px;
-}
-
-.mode-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.mode-slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #ffae42; 
-  transition: .4s;
-}
-
-.mode-slider.round {
-  border-radius: 34px;
-}
-
-.mode-slider.round:before {
-  position: absolute;
-  content: "";
-  height: 26px;
-  width: 26px;
-  left: 4px;
-  bottom: 4px;
-  background-color: white;
-  transition: .4s;
-  border-radius: 50%;
-}
-
-input:checked + .mode-slider {
-  background-color: #4CAF50; 
-}
-
-#log-scale-x-toggle-input:checked + .mode-slider {
-  background-color: #007bff; 
-}
-
-input:focus + .mode-slider {
-  box-shadow: 0 0 1px #2196F3;
-}
-
-input:checked + .mode-slider:before {
-  transform: translateX(26px);
-}
-
-#log-scale-x-panel input:not(:checked) ~ .mode-text:first-of-type { 
-  font-weight: bold;
-}
-
-#log-scale-x-panel input:checked ~ .mode-text:last-of-type { 
-  font-weight: bold;
-  color: #007bff; 
-}
-*/
 
 /* Radio Group Panel Styles */
 .radio-group-panel {
@@ -279,11 +201,6 @@ input:checked + .mode-slider:before {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-}
-
-.icon-btn svg {
-  /* The width and height are set inline on the SVG, this is just a fallback or override if needed */
-  /* vertical-align: middle; /* Could be useful depending on final icon alignment */
 }
 
 /* Corner Download Button Styles */
@@ -439,10 +356,6 @@ input:checked ~ .mode-text-fast {
 input:checked ~ .mode-text-precise {
   font-weight: bold;
   color: #4CAF50; /* Green color for Precise text when active */
-}
-
-.mode-text-precise {
-   /* Default precise text color if needed, or inherit */
 }
 
 /* Styles for Scale Toggle Switch */
