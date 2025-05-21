@@ -431,6 +431,48 @@ function displayMask(blob, sendTime, serverVolumes) {
   img.src = src
 }
 
+// --- Download Functionality ---
+
+/**
+ * Downloads the content of the main canvas as a PNG image.
+ */
+function downloadCanvasImage() {
+  if (canvas.width === 0 || canvas.height === 0 || downloadCanvasBtn.disabled) {
+    console.warn("Canvas is empty or download is disabled.");
+    return;
+  }
+  const dataURL = canvas.toDataURL("image/png");
+  const link = document.createElement("a");
+  link.href = dataURL;
+  link.download = "segmented_image.png";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+/**
+ * Downloads the CDF plot as an SVG file.
+ */
+function downloadPlotSVG() {
+  if (downloadPlotCornerBtn.disabled) {
+    console.warn("Plot download is disabled.");
+    return;
+  }
+  const serializer = new XMLSerializer();
+  const svgString = serializer.serializeToString(cdfPlotSvg);
+  const dataURL = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgString);
+  const link = document.createElement("a");
+  link.href = dataURL;
+  link.download = "cdf_plot.svg";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// Add event listeners for download buttons
+downloadCanvasBtn.addEventListener("click", downloadCanvasImage);
+downloadPlotCornerBtn.addEventListener("click", downloadPlotSVG);
+
 /**
  * @param {File} file
  * Process the image file when the user uploaded or pasted
