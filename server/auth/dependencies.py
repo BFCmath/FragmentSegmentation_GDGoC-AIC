@@ -2,7 +2,7 @@
 Authentication dependencies for protecting routes.
 """
 
-from fastapi import Depends, HTTPException, status, Cookie
+from fastapi import Depends, HTTPException, status, Cookie, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -52,17 +52,27 @@ def get_current_active_user(current_user: User = Depends(get_current_user)):
 
 
 def get_optional_current_user(
+    request: Request,
     access_token: Optional[str] = Cookie(None),
     db: Session = Depends(get_db)
 ):
     """Get current user if token is provided (optional authentication)"""
-    if not access_token:
+    token = None
+    
+    # First try to get token from Authorization header
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.replace("Bearer ", "")
+    
+    # If no header token, try cookie
+    elif access_token:
+        token = access_token.replace("Bearer ", "") if access_token.startswith("Bearer ") else access_token
+    
+    # If no token found, return None
+    if not token:
         return None
     
     try:
-        # Remove "Bearer " prefix if present
-        token = access_token.replace("Bearer ", "") if access_token.startswith("Bearer ") else access_token
-        
         credentials_exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials"

@@ -190,13 +190,16 @@
     <script>
       // Initialize authentication for main app
       document.addEventListener('DOMContentLoaded', function() {
+        console.log('🏠 Main application page loaded');
         const authManager = new AuthManager();
         const userWelcome = document.getElementById('userWelcome');
         const logoutBtn = document.getElementById('logoutBtn');
         
-        // Check if user is authenticated
+        // Simple authentication check
         const token = localStorage.getItem('authToken');
+        
         if (!token) {
+          console.log('❌ No authentication token, redirecting to login');
           window.location.href = '/frontend/html/login.html';
           return;
         }
@@ -205,12 +208,22 @@
         authManager.loadUserData().then(() => {
           const user = authManager.getCurrentUser();
           if (user) {
+            console.log('✅ User authenticated:', user.username);
             userWelcome.textContent = `Welcome, ${user.username}!`;
+          } else {
+            console.log('❌ Invalid token, redirecting to login');
+            localStorage.removeItem('authToken');
+            window.location.href = '/frontend/html/login.html';
           }
+        }).catch(() => {
+          console.log('❌ Authentication failed, redirecting to login');
+          localStorage.removeItem('authToken');
+          window.location.href = '/frontend/html/login.html';
         });
         
         // Logout functionality
         logoutBtn.addEventListener('click', async () => {
+          console.log('🚪 Logging out');
           await authManager.logout();
         });
       });

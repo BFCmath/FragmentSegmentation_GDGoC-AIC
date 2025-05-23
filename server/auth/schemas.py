@@ -55,6 +55,8 @@ class UserResponse(UserBase):
     id: int
     created_at: datetime
     is_active: bool
+    oauth_provider: Optional[str] = None
+    avatar_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -69,4 +71,16 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     """Token data schema"""
-    username: Optional[str] = None 
+    username: Optional[str] = None
+
+
+class OAuthAuthURL(BaseModel):
+    """OAuth authorization URL response"""
+    auth_url: str
+    state: str
+
+
+class OAuthCallback(BaseModel):
+    """OAuth callback data"""
+    code: str
+    state: str 

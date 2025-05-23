@@ -14,6 +14,10 @@ passlib[bcrypt]==1.7.4
 email-validator==2.1.0
 python-dotenv==1.0.0
 
+# OAuth dependencies
+authlib==1.2.1
+httpx==0.26.0
+
 # Machine learning dependencies
 torch==2.0.1
 onnxruntime==1.17.1 # For ONNX model inference

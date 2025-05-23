@@ -1,17 +1,23 @@
 /**
  * Authentication Manager
- * Handles login, signup, and user authentication
+ * Handles login, signup, and user authentication including OAuth
  */
 
 class AuthManager {
     constructor() {
+        console.log('🏗️ AuthManager constructor called');
         this.apiBase = '';
         this.token = localStorage.getItem('authToken');
         this.user = null;
         
+        console.log('💾 Token from localStorage:', this.token ? `${this.token.substring(0, 20)}...` : 'None');
+        
         // Load user data if token exists
         if (this.token) {
+            console.log('🔄 Token found, loading user data...');
             this.loadUserData();
+        } else {
+            console.log('⚠️ No token found in localStorage');
         }
     }
 
@@ -19,6 +25,7 @@ class AuthManager {
      * Initialize login form
      */
     static initLogin() {
+        console.log('🔧 Initializing login form...');
         const authManager = new AuthManager();
         const form = document.getElementById('loginForm');
         const usernameInput = document.getElementById('username');
@@ -26,10 +33,19 @@ class AuthManager {
         const passwordToggle = document.getElementById('passwordToggle');
         const submitBtn = form.querySelector('.auth-btn');
         const rememberCheckbox = document.getElementById('rememberMe');
+        const googleBtn = document.querySelector('.google-btn');
+
+        console.log('🎯 Form elements found:', {
+            form: !!form,
+            usernameInput: !!usernameInput,
+            passwordInput: !!passwordInput,
+            googleBtn: !!googleBtn
+        });
 
         // Password visibility toggle
         if (passwordToggle) {
             passwordToggle.addEventListener('click', () => {
+                console.log('👁️ Password visibility toggled');
                 authManager.togglePasswordVisibility(passwordInput, passwordToggle);
             });
         }
@@ -37,8 +53,18 @@ class AuthManager {
         // Form submission
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            console.log('📝 Login form submitted');
             await authManager.handleLogin(form, submitBtn);
         });
+
+        // Google OAuth login
+        if (googleBtn) {
+            googleBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                console.log('🔵 Google OAuth button clicked');
+                await authManager.handleGoogleLogin();
+            });
+        }
 
         // Real-time validation
         usernameInput.addEventListener('input', () => {
@@ -52,15 +78,21 @@ class AuthManager {
         // Auto-fill from localStorage if remember me was checked
         const rememberedUsername = localStorage.getItem('rememberedUsername');
         if (rememberedUsername) {
+            console.log('💭 Auto-filling remembered username:', rememberedUsername);
             usernameInput.value = rememberedUsername;
             rememberCheckbox.checked = true;
         }
+
+        // Handle OAuth callback if present
+        authManager.handleOAuthCallback();
+        console.log('✅ Login form initialization complete');
     }
 
     /**
      * Initialize signup form
      */
     static initSignup() {
+        console.log('🔧 Initializing signup form...');
         const authManager = new AuthManager();
         const form = document.getElementById('signupForm');
         const usernameInput = document.getElementById('username');
@@ -70,16 +102,26 @@ class AuthManager {
         const passwordToggle = document.getElementById('passwordToggle');
         const confirmPasswordToggle = document.getElementById('confirmPasswordToggle');
         const submitBtn = form.querySelector('.auth-btn');
+        const googleBtn = document.querySelector('.google-btn');
+
+        console.log('🎯 Signup form elements found:', {
+            form: !!form,
+            usernameInput: !!usernameInput,
+            emailInput: !!emailInput,
+            googleBtn: !!googleBtn
+        });
 
         // Password visibility toggles
         if (passwordToggle) {
             passwordToggle.addEventListener('click', () => {
+                console.log('👁️ Password visibility toggled');
                 authManager.togglePasswordVisibility(passwordInput, passwordToggle);
             });
         }
 
         if (confirmPasswordToggle) {
             confirmPasswordToggle.addEventListener('click', () => {
+                console.log('👁️ Confirm password visibility toggled');
                 authManager.togglePasswordVisibility(confirmPasswordInput, confirmPasswordToggle);
             });
         }
@@ -87,8 +129,18 @@ class AuthManager {
         // Form submission
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            console.log('📝 Signup form submitted');
             await authManager.handleSignup(form, submitBtn);
         });
+
+        // Google OAuth signup
+        if (googleBtn) {
+            googleBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                console.log('🔵 Google OAuth signup button clicked');
+                await authManager.handleGoogleLogin();
+            });
+        }
 
         // Real-time validation
         usernameInput.addEventListener('input', () => {
@@ -110,6 +162,147 @@ class AuthManager {
         confirmPasswordInput.addEventListener('input', () => {
             authManager.validatePasswordMatch(passwordInput, confirmPasswordInput);
         });
+
+        // Handle OAuth callback if present
+        authManager.handleOAuthCallback();
+        console.log('✅ Signup form initialization complete');
+    }
+
+    /**
+     * Handle Google OAuth login
+     */
+    async handleGoogleLogin() {
+        try {
+            console.log('🔵 Starting Google OAuth flow...');
+            // Get Google OAuth URL
+            const response = await fetch('/auth/oauth/google');
+            const data = await response.json();
+
+            console.log('📡 OAuth URL response:', {
+                status: response.status,
+                ok: response.ok,
+                hasAuthUrl: !!data.auth_url,
+                hasState: !!data.state
+            });
+
+            if (response.ok) {
+                console.log('💾 Storing OAuth state for verification...');
+                // Store state for verification
+                localStorage.setItem('oauth_state', data.state);
+                
+                console.log('🔄 Redirecting to Google OAuth...');
+                // Redirect to Google OAuth
+                window.location.href = data.auth_url;
+            } else {
+                console.error('❌ OAuth URL request failed:', data);
+                this.showError('OAuth not configured. Please contact administrator.');
+            }
+        } catch (error) {
+            console.error('💥 Google OAuth error:', error);
+            this.showError('Failed to initiate Google login. Please try again.');
+        }
+    }
+
+    /**
+     * Handle OAuth callback (when returning from Google)
+     */
+    async handleOAuthCallback() {
+        console.log('🔍 Checking for OAuth callback parameters...');
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const state = urlParams.get('state');
+        const error = urlParams.get('error');
+
+        console.log('📋 OAuth callback parameters:', {
+            code: code ? `${code.substring(0, 20)}...` : null,
+            state: state ? `${state.substring(0, 20)}...` : null,
+            error: error,
+            fullURL: window.location.href
+        });
+
+        // Check for OAuth errors in URL
+        if (error) {
+            console.error('❌ OAuth error in URL:', error);
+            // Clear URL parameters
+            window.history.replaceState({}, document.title, window.location.pathname);
+            this.showError(this.getOAuthErrorMessage(error));
+            return;
+        }
+
+        // Check if this is an OAuth callback
+        if (!code) {
+            console.log('ℹ️ No OAuth code found, not an OAuth callback');
+            return;
+        }
+
+        console.log('🔄 Processing OAuth callback...');
+        // Clear URL parameters
+        window.history.replaceState({}, document.title, window.location.pathname);
+
+        if (code && state) {
+            try {
+                // Verify state matches what we stored
+                const storedState = localStorage.getItem('oauth_state');
+                console.log('🔐 Verifying OAuth state...', {
+                    receivedState: state ? `${state.substring(0, 20)}...` : null,
+                    storedState: storedState ? `${storedState.substring(0, 20)}...` : null,
+                    matches: state === storedState
+                });
+
+                if (state !== storedState) {
+                    console.error('❌ OAuth state mismatch!');
+                    this.showError('OAuth security error. Please try again.');
+                    return;
+                }
+
+                // Clear stored state
+                localStorage.removeItem('oauth_state');
+                console.log('🧹 Cleared stored OAuth state');
+
+                // Note: The callback is now handled by the server redirect
+                // This code shouldn't typically run since we redirect to oauth-success.html
+                console.warn('⚠️ OAuth callback reached client-side handler - this should redirect server-side');
+                this.showError('OAuth callback handling error. Please try signing in again.');
+
+            } catch (error) {
+                console.error('💥 OAuth callback error:', error);
+                this.showError('Failed to complete OAuth authentication.');
+            }
+        }
+    }
+
+    /**
+     * Get user-friendly OAuth error message
+     */
+    getOAuthErrorMessage(error) {
+        console.log('📝 Getting OAuth error message for:', error);
+        switch (error) {
+            case 'incomplete_user_info':
+                return 'We couldn\'t get your complete profile information from Google. Please try again.';
+            case 'oauth_failed':
+                return 'OAuth authentication failed. Please try signing in again.';
+            default:
+                return `Authentication error: ${error}. Please try again.`;
+        }
+    }
+
+    /**
+     * Check for OAuth errors on page load
+     */
+    static checkOAuthErrors() {
+        console.log('🔍 Checking for OAuth errors in URL...');
+        const urlParams = new URLSearchParams(window.location.search);
+        const error = urlParams.get('error');
+        
+        if (error) {
+            console.error('❌ OAuth error found in URL:', error);
+            const authManager = new AuthManager();
+            // Clear URL parameters
+            window.history.replaceState({}, document.title, window.location.pathname);
+            authManager.showError(authManager.getOAuthErrorMessage(error));
+        } else {
+            console.log('✅ No OAuth errors found');
+        }
     }
 
     /**
@@ -117,6 +310,7 @@ class AuthManager {
      */
     async handleLogin(form, submitBtn) {
         try {
+            console.log('🔐 Processing login...');
             this.setLoading(submitBtn, true);
             this.hideMessages();
 
@@ -125,6 +319,8 @@ class AuthManager {
                 username: formData.get('username'),
                 password: formData.get('password')
             };
+
+            console.log('📤 Sending login request for user:', userData.username);
 
             const response = await fetch('/auth/login', {
                 method: 'POST',
@@ -135,16 +331,31 @@ class AuthManager {
             });
 
             const data = await response.json();
+            console.log('📡 Login response:', {
+                status: response.status,
+                ok: response.ok,
+                hasToken: !!data.access_token,
+                hasUser: !!data.user
+            });
 
             if (response.ok) {
+                console.log('✅ Login successful! User:', {
+                    id: data.user.id,
+                    username: data.user.username,
+                    email: data.user.email,
+                    oauth_provider: data.user.oauth_provider
+                });
+
                 // Store token and user data
                 this.token = data.access_token;
                 this.user = data.user;
                 localStorage.setItem('authToken', this.token);
+                console.log('💾 Token and user data stored');
                 
                 // Handle remember me
                 const rememberMe = form.querySelector('#rememberMe').checked;
                 if (rememberMe) {
+                    console.log('💭 Saving username for next time');
                     localStorage.setItem('rememberedUsername', userData.username);
                 } else {
                     localStorage.removeItem('rememberedUsername');
@@ -152,15 +363,17 @@ class AuthManager {
 
                 this.showSuccess('Login successful! Redirecting...');
                 
+                console.log('🔄 Redirecting to main application in 1.5 seconds...');
                 // Redirect to main application
                 setTimeout(() => {
                     window.location.href = '/';
                 }, 1500);
             } else {
+                console.error('❌ Login failed:', data.detail || 'Unknown error');
                 this.showError(data.detail || 'Login failed. Please try again.');
             }
         } catch (error) {
-            console.error('Login error:', error);
+            console.error('💥 Login network error:', error);
             this.showError('Network error. Please check your connection and try again.');
         } finally {
             this.setLoading(submitBtn, false);
@@ -422,22 +635,37 @@ class AuthManager {
      */
     async loadUserData() {
         try {
+            console.log('📡 Loading user data from server...');
             const response = await fetch('/auth/me', {
                 headers: {
                     'Authorization': `Bearer ${this.token}`
                 }
             });
 
+            console.log('📡 User data response:', {
+                status: response.status,
+                ok: response.ok,
+                statusText: response.statusText
+            });
+
             if (response.ok) {
                 this.user = await response.json();
+                console.log('✅ User data loaded successfully:', {
+                    id: this.user.id,
+                    username: this.user.username,
+                    email: this.user.email,
+                    oauth_provider: this.user.oauth_provider,
+                    avatar_url: this.user.avatar_url ? 'Present' : 'None'
+                });
             } else {
+                console.warn('❌ Token validation failed, clearing auth data');
                 // Token is invalid, remove it
                 localStorage.removeItem('authToken');
                 this.token = null;
                 this.user = null;
             }
         } catch (error) {
-            console.error('Error loading user data:', error);
+            console.error('💥 Error loading user data:', error);
         }
     }
 
@@ -446,22 +674,27 @@ class AuthManager {
      */
     async logout() {
         try {
+            console.log('🚪 Logging out user...');
             await fetch('/auth/logout', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${this.token}`
                 }
             });
+            console.log('📡 Logout request sent to server');
         } catch (error) {
-            console.error('Logout error:', error);
+            console.error('💥 Logout server error:', error);
         } finally {
+            console.log('🧹 Clearing local authentication data...');
             // Clear local data regardless of server response
             localStorage.removeItem('authToken');
+            localStorage.removeItem('oauth_state');
             this.token = null;
             this.user = null;
             
+            console.log('🔄 Redirecting to login page...');
             // Redirect to login
-            window.location.href = '/auth_templates/login.html';
+            window.location.href = '/frontend/html/login.html';
         }
     }
 

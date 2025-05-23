@@ -10,6 +10,17 @@ DEV_MODE = os.getenv('DEBUG', 'True').lower() == 'true'  # Set to True for devel
 PORT = int(os.getenv('PORT', '3000'))
 HOST = os.getenv('HOST', '127.0.0.1')
 
+# --- OAuth Configuration ---
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
+GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', f"http://localhost:{PORT}/auth/oauth/google/callback")
+
+# OAuth Scopes
+GOOGLE_SCOPES = ['openid', 'email', 'profile']
+
+# OAuth URLs
+GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid_configuration"
+
 # --- Model Paths ---
 RGB_WEIGHT_PATH_TEMPLATE = 'weights/yolo_rgb_{}.onnx'
 RGBD_WEIGHT_PATH_TEMPLATE = 'weights/yolo_rgbd_{}.onnx'

@@ -51,32 +51,8 @@ class NoCacheStaticFiles(StaticFiles):
 
 def homepage(current_user: Optional[User] = Depends(get_optional_current_user)) -> HTMLResponse:
     """Return the HTML homepage for the application."""
-    # If user is not authenticated, redirect to login
-    if not current_user:
-        redirect_html = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>ENEOPI - Authentication Required</title>
-            <meta http-equiv="refresh" content="0; url=/frontend/html/login.html">
-        </head>
-        <body>
-            <p>Redirecting to login...</p>
-        </body>
-        </html>
-        """
-        response = HTMLResponse(redirect_html)
-        
-        # Add no-cache headers in development
-        dev_mode = env.get('DEV') is not None or cfg.DEV_MODE
-        if dev_mode:
-            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Expires"] = "0"
-        
-        return response
-    
-    with open('frontend/html/index.html', 'r') as f:
+    # Always serve the main application - let client-side handle authentication
+    with open('frontend/html/index.html', 'r', encoding='utf-8') as f:
         html_file = f.read()
         response = HTMLResponse(html_file)
         
