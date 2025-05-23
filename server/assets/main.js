@@ -165,6 +165,19 @@ function randomColor(count) {
   return result
 }
 
+class PlotData {
+  /**
+   * @param {number} value
+   * @param {number} display
+   * @param {Uint8ClampedArray} color
+   */
+  constructor(value, display, color) {
+    this.value = value
+    this.display = display
+    this.color = color
+  }
+}
+
 /**
  * @param {Float64Array} volumes
  * @param {Uint8ClampedArray} colors
@@ -191,17 +204,19 @@ function plotCdf(volumes, colors) {
     return;
   }
 
-  // 1. Create an array of objects to hold original and display values
-  const plotData = Array.from(volumes).map(v => ({
-    originalValue: v,
-    displayValue: useLogScaleX ? Math.log10(Math.max(v, 1)) : v
-  }));
+  /** @type{PlotData[]} */
+  const plotData = new Array(volumes.length)
+  for (let i = 0; i < volumes.length; ++i) {
+    const v = volumes[i]
+    const displayValue = useLogScaleX ? Math.log10(Math.max(v, 1)) : v
+    plotData[i] = new PlotData(v, displayValue, colors.subarray(i * 3, (i + 1) * 3))
+  }
 
   // 2. Sort this array based on displayValue
-  plotData.sort((a, b) => a.displayValue - b.displayValue);
+  plotData.sort((a, b) => a.display - b.display);
 
-  const minDisplayValue = plotData[0].displayValue;
-  const maxDisplayValue = plotData[plotData.length - 1].displayValue;
+  const minDisplayValue = plotData[0].display;
+  const maxDisplayValue = plotData[plotData.length - 1].display;
 
   // 3. Update X-axis tick labels
   const tickElements = vticks.children;
@@ -265,7 +280,7 @@ function plotCdf(volumes, colors) {
     const dataPoint = plotData[i];
     y -= yDec;
     
-    const x = (dataPoint.displayValue - minDisplayValue) * 600 / (maxDisplayValue - minDisplayValue) + 100;
+    const x = (dataPoint.display - minDisplayValue) * 600 / (maxDisplayValue - minDisplayValue) + 100;
 
     if (distinctPointsIdx > 0 && x === xs[distinctPointsIdx - 1]) {
       ys[distinctPointsIdx - 1] = y; // Update y for vertical segments
@@ -273,6 +288,16 @@ function plotCdf(volumes, colors) {
       xs[distinctPointsIdx] = x;
       ys[distinctPointsIdx] = y;
       distinctPointsIdx += 1;
+      
+      const elem = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      elem.setAttribute("cx", x.toString());
+      elem.setAttribute("cy", y.toString());
+      elem.setAttribute("r", "3");
+
+      const [r_val, g_val, b_val] = dataPoint.color
+      elem.setAttribute("fill", `rgb(${r_val},${g_val},${b_val})`);
+
+      points.appendChild(elem);
     }
 
     // Quantile logic (using originalValue for text)
@@ -283,7 +308,7 @@ function plotCdf(volumes, colors) {
       line.setAttribute("y1", y.toString());
       line.setAttribute("y2", "550");
 
-      text.textContent = `${prefix} = ${dataPoint.originalValue.toFixed(2)}`;
+      text.textContent = `${prefix} = ${dataPoint.value.toFixed(2)}`;
       text.setAttribute("y", y.toString());
       text.setAttribute("x", (x + 25).toString());
       
@@ -300,30 +325,6 @@ function plotCdf(volumes, colors) {
       
       ++q_idx;
     }
-  }
-
-  // Draw the CDF points
-  for (let i = 1; i < distinctPointsIdx; ++i) {
-    const elem = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    elem.setAttribute("cx", xs[i].toString());
-    elem.setAttribute("cy", ys[i].toString());
-    elem.setAttribute("r", "3");
-    
-    // Color mapping needs to be considered carefully if plotData was re-sorted.
-    // If colors correspond to the original unsorted `volumes` array:
-    // We need to find original index of plotData[i-1].originalValue in `volumes` to pick the right color.
-    // For now, to keep it simpler, let's color based on the sorted order of plotData.
-    // This means the (i-1)-th point in the sorted plot gets the (i-1)-th color.
-    if (colors && (i-1) < colors.length / 3 ) {
-      const colorIndex = (i-1) * 3; 
-      const r_val = colors[colorIndex];
-      const g_val = colors[colorIndex + 1];
-      const b_val = colors[colorIndex + 2];
-      elem.setAttribute("fill", `rgb(${r_val},${g_val},${b_val})`);
-    } else {
-      elem.setAttribute("fill", "black"); 
-    }
-    points.appendChild(elem);
   }
 
   if (distinctPointsIdx <= 2) {
