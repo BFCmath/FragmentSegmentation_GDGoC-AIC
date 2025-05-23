@@ -16,21 +16,78 @@ from os import environ as env
 from typing import Literal, Optional
 
 import uvicorn
-from fastapi import FastAPI, Query, UploadFile
+from fastapi import FastAPI, Query, UploadFile, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
 from PIL import Image
 
 from model import ModelHandler, RGBDModelHandler
 import config as cfg
 
-def homepage() -> HTMLResponse:
+# Authentication imports
+from auth.database import create_tables
+from auth.routes import router as auth_router
+from auth.dependencies import get_optional_current_user
+from auth.models import User
+
+
+class NoCacheStaticFiles(StaticFiles):
+    """Custom StaticFiles that disables caching for development"""
+    
+    def __init__(self, *args, **kwargs):
+        self.disable_cache = kwargs.pop('disable_cache', False)
+        super().__init__(*args, **kwargs)
+    
+    def file_response(self, *args, **kwargs) -> Response:
+        response = super().file_response(*args, **kwargs)
+        if self.disable_cache:
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
+def homepage(current_user: Optional[User] = Depends(get_optional_current_user)) -> HTMLResponse:
     """Return the HTML homepage for the application."""
-    with open('index.html', 'r') as f:
+    # If user is not authenticated, redirect to login
+    if not current_user:
+        redirect_html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>ENEOPI - Authentication Required</title>
+            <meta http-equiv="refresh" content="0; url=/frontend/html/login.html">
+        </head>
+        <body>
+            <p>Redirecting to login...</p>
+        </body>
+        </html>
+        """
+        response = HTMLResponse(redirect_html)
+        
+        # Add no-cache headers in development
+        dev_mode = env.get('DEV') is not None or cfg.DEV_MODE
+        if dev_mode:
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        
+        return response
+    
+    with open('frontend/html/index.html', 'r') as f:
         html_file = f.read()
-        return HTMLResponse(html_file)
+        response = HTMLResponse(html_file)
+        
+        # Add no-cache headers in development
+        dev_mode = env.get('DEV') is not None or cfg.DEV_MODE
+        if dev_mode:
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        
+        return response
 
 
 @asynccontextmanager
@@ -50,6 +107,14 @@ async def lifespan(app: FastAPI):
         ]
     )
     app.state.logger = logging.getLogger(__name__)
+
+    # Initialize database
+    try:
+        create_tables()
+        app.state.logger.info('Database tables created successfully')
+    except Exception as e:
+        app.state.logger.error(f"Failed to initialize database: {e}")
+        raise
 
     # Load the models
     version_type = 'nano'  # Could be configurable via environment
@@ -166,18 +231,35 @@ async def process_image(req: Request, file: UploadFile, use_depth: bool = False)
         )
 
 
-async def predict(req: Request, file: UploadFile, use_depth: Literal["fast", "precise"] = Query("fast")):
+async def predict(
+    req: Request, 
+    file: UploadFile, 
+    use_depth: Literal["fast", "precise"] = Query("fast"),
+    current_user: User = Depends(get_optional_current_user)
+):
     """
     Process images using either fast (RGB) or precise (RGBD) mode.
+    Requires authentication.
     
     Args:
         req: FastAPI request object
         file: Uploaded image file
         use_depth: Whether to use precise mode with depth estimation
+        current_user: Current authenticated user
         
     Returns:
         Processed image results
     """
+    # Check if user is authenticated
+    if not current_user:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "success": False,
+                "error": "Authentication required. Please log in to use this service."
+            }
+        )
+    
     use_depth_mode = use_depth.lower() == "precise"
     return await process_image(req, file, use_depth=use_depth_mode)
 
@@ -201,11 +283,14 @@ def make_app(is_dev: bool = False) -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=['*'],
+        allow_origins=cfg.ALLOWED_ORIGINS,
         allow_credentials=True,
         allow_methods=['*'],
         allow_headers=['*'],
     )
+
+    # Include authentication routes
+    app.include_router(auth_router)
 
     # Optimize homepage delivery in production
     if is_dev:
@@ -215,7 +300,14 @@ def make_app(is_dev: bool = False) -> FastAPI:
         app.get('/')(homepage)
 
     app.post('/predict')(predict)
-    app.mount('/assets', StaticFiles(directory='assets'), name='assets')
+    
+    # Static file mounts
+    if not is_dev:
+        app.mount('/frontend', StaticFiles(directory='frontend'), name='frontend')
+        app.mount('/auth_templates', StaticFiles(directory='frontend/html'), name='auth_templates')
+    else:
+        app.mount('/frontend', NoCacheStaticFiles(directory='frontend', disable_cache=is_dev), name='frontend')
+        app.mount('/auth_templates', NoCacheStaticFiles(directory='frontend/html', disable_cache=is_dev), name='auth_templates')
     
     return app
 
@@ -230,4 +322,4 @@ if __name__ == '__main__':
     if dev:
         uvicorn.run('app:app', host='127.0.0.1', port=port, reload=True)
     else:
-        uvicorn.run(app, host='0.0.0.0', port=port)
+        uvicorn.run(app, host='0.0.0.0', port=port) 

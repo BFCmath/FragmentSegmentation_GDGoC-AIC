@@ -14,7 +14,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-import config as cfg # Import the main config
+import config as cfg
 from utils.depth_anything_v2.dpt import DepthAnythingV2
 
 

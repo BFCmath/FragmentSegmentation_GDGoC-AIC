@@ -1,7 +1,14 @@
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
 # --- Application Settings ---
 ALLOWED_CONTENT_TYPES = ['image/jpeg', 'image/png']
-DEV_MODE = True  # Set to True for development, overridden by ENV var
-PORT = 3000
+DEV_MODE = os.getenv('DEBUG', 'True').lower() == 'true'  # Set to True for development, overridden by ENV var
+PORT = int(os.getenv('PORT', '3000'))
+HOST = os.getenv('HOST', '127.0.0.1')
 
 # --- Model Paths ---
 RGB_WEIGHT_PATH_TEMPLATE = 'weights/yolo_rgb_{}.onnx'
@@ -33,8 +40,10 @@ DEPTH_MODEL_CONFIGS = {
     'vitg': {'encoder': 'vitg', 'features': 384, 'out_channels': [1536, 1536, 1536, 1536]}
 }
 
+# --- CORS Configuration ---
+ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', '*').split(',')
 
 # --- Logging ---
-LOG_LEVEL = "INFO"
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 LOG_FILE = 'api.log' 
