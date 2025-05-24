@@ -18,6 +18,7 @@ import onnxruntime
 
 import config as cfg # Import the new config file
 from utils.depth_handler import DepthHandler
+from utils.pointcloud import PointCloudGenerator
 
 class Config:
     """Configuration settings for model initialization and inference."""
@@ -150,6 +151,31 @@ class BaseModelHandler(ABC):
             self.logger.error(f'Failed to load ONNX model: {str(e)}')
             raise
     
+    def _calculate_2d_volume(self, mask: np.ndarray) -> float:
+        """
+        Calculate volume using 2D pixel-based estimation.
+        
+        Args:
+            mask: Binary mask array (H, W) with values 0 or 255
+            
+        Returns:
+            Estimated volume
+        """
+        pixel_count = np.sum(mask > 0)
+        return (4/3) * np.power(pixel_count / np.pi, 3/2) if pixel_count > 0 else 0.0
+    
+    def _calculate_volumes_for_masks(self, masks: List[np.ndarray]) -> List[float]:
+        """
+        Calculate volumes for a list of masks using 2D estimation.
+        
+        Args:
+            masks: List of binary mask arrays
+            
+        Returns:
+            List of calculated volumes
+        """
+        return [self._calculate_2d_volume(mask) for mask in masks]
+    
     @abstractmethod
     def preprocess(self, image_bytes: Union[bytes, np.ndarray]) -> np.ndarray:
         """
@@ -218,7 +244,6 @@ class BaseModelHandler(ABC):
         proto_masks = prediction[1]
 
         return self._postprocess_onnx(output0, proto_masks)
-
 
     def _postprocess_onnx(self, output0: np.ndarray, proto_masks: np.ndarray) -> Tuple[np.ndarray, List[float]]:
         """
@@ -339,21 +364,12 @@ class BaseModelHandler(ABC):
             binary_mask_final = (full_image_mask > 0.5).astype(np.uint8) * 255
             generated_masks.append(binary_mask_final)
 
-        final_masks_for_output = []
-        volumes = []
-
         if generated_masks:
-            for mask_np in generated_masks:
-                pixel_count = np.sum(mask_np > 0)
-                volume = (4/3) * np.power(pixel_count / np.pi, 3/2) if pixel_count > 0 else 0.0
-                
-                final_masks_for_output.append(mask_np)
-                volumes.append(float(volume))
-                
-            if final_masks_for_output:
-                stacked_img = np.vstack(final_masks_for_output)
-                self.logger.info(f"ONNX Postprocessing successful. Found {len(volumes)} objects.")
-                return stacked_img, volumes
+            # Use the common volume calculation method
+            volumes = self._calculate_volumes_for_masks(generated_masks)
+            stacked_img = np.vstack(generated_masks)
+            self.logger.info(f"ONNX Postprocessing successful. Found {len(volumes)} objects.")
+            return stacked_img, volumes
         
         self.logger.info("ONNX Postprocessing complete. No masks generated or met criteria.")
         return np.zeros((cfg.MODEL_INPUT_HEIGHT, cfg.MODEL_INPUT_WIDTH), dtype=np.uint8), []
@@ -378,7 +394,19 @@ class RGBDModelHandler(BaseModelHandler):
             self.logger.info(f'Initializing depth handler with model: {depth_model_path}')
             # Pass the depth model type from main config if needed, or let DepthHandler use its default
             self.depth_handler = DepthHandler(depth_model_path, logger, model_type=cfg.DEPTH_MODEL_TYPE)
-            self.logger.info(f'RGBD model initialized successfully')
+            
+            # Initialize point cloud generator for volume calculation
+            self.pc_generator = PointCloudGenerator(
+                focal_length_x=cfg.FOCAL_LENGTH_X,
+                focal_length_y=cfg.FOCAL_LENGTH_Y,
+                mode="pca"
+            )
+            
+            # Store current RGB image and depth map for point cloud generation
+            self.current_rgb_image = None
+            self.current_depth_map = None
+            
+            self.logger.info(f'RGBD model initialized successfully with point cloud support')
         except Exception as e:
             self.logger.error(f'Failed to initialize depth model: {str(e)}')
             raise
@@ -411,10 +439,42 @@ class RGBDModelHandler(BaseModelHandler):
         depth_map = self.depth_handler.predict(image_bytes)
         depth_map = self.depth_handler.postprocess(depth_map)
         
+        # Store RGB and depth for later point cloud generation
+        self.current_rgb_image = rgb_img.copy()
+        self.current_depth_map = depth_map.copy()
+        
         # Combine RGB and depth into RGBD
         rgbd_img = create_rgbd_image(rgb_img, depth_map)
         
         return rgbd_img
+    
+    def _calculate_volumes_for_masks(self, masks: List[np.ndarray]) -> List[float]:
+        """
+        Calculate volumes for masks using point cloud-based method with 2D fallback.
+        
+        Args:
+            masks: List of binary mask arrays
+            
+        Returns:
+            List of calculated volumes
+        """
+        if self.current_rgb_image is not None and self.current_depth_map is not None:
+            try:
+                volumes = self.pc_generator.calculate_volumes_from_masks(
+                    self.current_rgb_image,
+                    self.current_depth_map,
+                    masks
+                )
+                self.logger.info(f"RGBD: Calculated {len(volumes)} point cloud-based volumes")
+                return volumes
+            except Exception as e:
+                self.logger.error(f"Point cloud volume calculation failed: {e}")
+                self.logger.info("Falling back to 2D volume calculation")
+        else:
+            self.logger.warning("No RGB/depth data available for point cloud calculation, using 2D fallback")
+        
+        # Fallback to parent's 2D calculation
+        return super()._calculate_volumes_for_masks(masks)
 
 class ModelHandler(BaseModelHandler):
     """Handler for standard RGB-only YOLO model."""

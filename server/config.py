@@ -54,6 +54,12 @@ DEPTH_MODEL_CONFIGS = {
 # --- CORS Configuration ---
 ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', '*').split(',')
 
+# --- Point Cloud Configuration ---
+# Default camera parameters for point cloud generation
+FOCAL_LENGTH_X = 470.4
+FOCAL_LENGTH_Y = 470.4
+MAX_DEPTH = 20.0  # Maximum depth value for normalization
+
 # --- Logging ---
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
