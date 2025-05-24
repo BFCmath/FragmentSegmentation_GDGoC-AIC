@@ -9,7 +9,7 @@ The primary goal of this workflow is to produce the `.pt` model weights, which a
 - `fst-depth-data-generation.ipynb`: Jupyter Notebook for generating depth maps from RGB images. These depth maps serve as the fourth channel for the RGB-D dataset.
 - `fst-mask-converter.ipynb`: Jupyter Notebook to convert segmentation masks into the YOLO `.txt` format, required for training the YOLOv8 RGB-D model.
 - `fst-yolov8-rgbd.ipynb`: Jupyter Notebook for training the 4-channel YOLOv8-nano segmentation model using RGB images combined with the generated depth data.
-- `script/`: Contains various Python scripts that likely provide utility functions, helper classes, or modular components used within the training notebooks (e.g., dataset handling, model definitions, specific training loops).
+- `script/`: contains the scripts for training the models
 - `depth_estimation/`: Contains scripts or utilities related to the Depth Anything V2 model.
 - `version/`: Potentially holds results for different model versions.
 
