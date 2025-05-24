@@ -507,13 +507,24 @@ function processFile(file) {
         const formdata = new FormData()
         formdata.append("file", blob, "input.png")
         
+        // Get authentication token
+        const token = localStorage.getItem('authToken');
+        
         const sendTime = performance.now();          
         console.log(`Sending image to server using RGBD model in ${preciseMode ? 'precise' : 'fast'} mode...`);
         const endpoint = `/predict?use_depth=${preciseMode ? 'precise' : 'fast'}`
-        const resp = await fetch(endpoint, {
+        
+        const fetchOptions = {
           method: "POST",
           body: formdata,
-        })        
+        };
+        
+        if (token) {
+          fetchOptions.headers = { 'Authorization': `Bearer ${token}` };
+        }
+        
+        const resp = await fetch(endpoint, fetchOptions);
+        
         const jsonResponse = await resp.json();
         
         if (!jsonResponse.success) {

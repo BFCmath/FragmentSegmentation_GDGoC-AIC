@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth Success - ENEOPI</title>
+    <link rel="stylesheet" href="/frontend/css/auth.css">
+    <style>
+        .success-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            text-align: center;
+        }
+        
+        .success-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+        }
+        
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: linear-gradient(45deg, #4ecdc4, #44a08d);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .success-icon svg {
+            width: 40px;
+            height: 40px;
+            stroke: white;
+            fill: none;
+            stroke-width: 3;
+        }
+        
+        .success-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: white;
+            margin-bottom: 10px;
+        }
+        
+        .success-message {
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #4ecdc4;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-icon {
+            background: linear-gradient(45deg, #ff6b6b, #ff5252);
+        }
+        
+        .retry-btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 20px;
+            transition: transform 0.2s;
+        }
+        
+        .retry-btn:hover {
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-background">
+            <div class="floating-shapes">
+                <div class="shape shape-1"></div>
+                <div class="shape shape-2"></div>
+                <div class="shape shape-3"></div>
+            </div>
+        </div>
+        
+        <div class="success-container">
+            <div class="success-card">
+                <div class="success-icon" id="statusIcon">
+                    <svg id="successIcon" viewBox="0 0 24 24">
+                        <path d="M20 6L9 17l-5-5"></path>
+                    </svg>
+                    <svg id="errorIcon" viewBox="0 0 24 24" style="display: none;">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </div>
+                
+                <h1 class="success-title" id="statusTitle">Authentication Successful!</h1>
+                <p class="success-message" id="statusMessage">
+                    You have successfully signed in with Google. Redirecting you to the application...
+                </p>
+                
+                <div class="loading-spinner" id="loadingSpinner"></div>
+                
+                <a href="/frontend/html/login.html" class="retry-btn" id="retryBtn" style="display: none;">
+                    Try Again
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // OAuth success handler
+        class OAuthSuccessHandler {
+            constructor() {
+                console.log('🔧 OAuth Success Handler initialized');
+                this.init();
+            }
+
+            init() {
+                console.log('🔍 Checking URL parameters...');
+                const urlParams = new URLSearchParams(window.location.search);
+                const token = urlParams.get('token');
+                const error = urlParams.get('error');
+
+                console.log('📋 URL Parameters:', {
+                    token: token ? `${token.substring(0, 20)}...` : null,
+                    error: error,
+                    fullURL: window.location.href
+                });
+
+                if (error) {
+                    console.error('❌ OAuth error detected:', error);
+                    this.showError(error);
+                } else if (token) {
+                    console.log('✅ Token found, processing success...');
+                    this.handleSuccess(token);
+                } else {
+                    console.error('❌ No token or error found in URL');
+                    this.showError('No authentication data received');
+                }
+            }
+
+            async handleSuccess(token) {
+                try {
+                    console.log('💾 Storing token in localStorage...');
+                    // Store the token
+                    localStorage.setItem('authToken', token);
+                    console.log('✅ Token stored successfully');
+                    
+                    console.log('🔐 Verifying token with server...');
+                    // Get user info to verify token
+                    const response = await fetch('/auth/me', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+
+                    console.log('📡 Server response status:', response.status);
+
+                    if (response.ok) {
+                        const user = await response.json();
+                        console.log('✅ OAuth login successful! User data:', {
+                            id: user.id,
+                            username: user.username,
+                            email: user.email,
+                            oauth_provider: user.oauth_provider,
+                            avatar_url: user.avatar_url ? 'Present' : 'None'
+                        });
+                        
+                        console.log('⏱️ Redirecting to main application in 2 seconds...');
+                        // Small delay for better UX
+                        setTimeout(() => {
+                            console.log('🔄 Redirecting to main application...');
+                            window.location.href = '/';
+                        }, 2000);
+                    } else {
+                        const errorData = await response.text();
+                        console.error('❌ Token verification failed:', {
+                            status: response.status,
+                            statusText: response.statusText,
+                            error: errorData
+                        });
+                        throw new Error('Invalid token received');
+                    }
+                } catch (error) {
+                    console.error('💥 OAuth success handling error:', error);
+                    this.showError('Failed to complete authentication');
+                }
+            }
+
+            showError(message) {
+                console.log('🎨 Updating UI to show error:', message);
+                const statusIcon = document.getElementById('statusIcon');
+                const statusTitle = document.getElementById('statusTitle');
+                const statusMessage = document.getElementById('statusMessage');
+                const loadingSpinner = document.getElementById('loadingSpinner');
+                const retryBtn = document.getElementById('retryBtn');
+                const successIcon = document.getElementById('successIcon');
+                const errorIcon = document.getElementById('errorIcon');
+
+                // Update UI for error state
+                statusIcon.classList.add('error-icon');
+                successIcon.style.display = 'none';
+                errorIcon.style.display = 'block';
+                
+                statusTitle.textContent = 'Authentication Failed';
+                statusMessage.textContent = this.getErrorMessage(message);
+                
+                loadingSpinner.style.display = 'none';
+                retryBtn.style.display = 'inline-block';
+                
+                console.log('✅ Error UI updated');
+            }
+
+            getErrorMessage(error) {
+                console.log('📝 Getting error message for:', error);
+                switch (error) {
+                    case 'incomplete_user_info':
+                        return 'We couldn\'t get your complete profile information from Google. Please try again.';
+                    case 'oauth_failed':
+                        return 'OAuth authentication failed. Please try signing in again.';
+                    default:
+                        return `Authentication error: ${error}. Please try again.`;
+                }
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('📄 OAuth success page loaded, initializing handler...');
+            new OAuthSuccessHandler();
+        });
+    </script>
+</body>
+</html> 

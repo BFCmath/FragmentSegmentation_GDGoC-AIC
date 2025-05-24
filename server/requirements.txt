@@ -3,9 +3,20 @@
 --extra-index-url https://pypi.org/simple
 
 # API dependencies
-fastapi==0.103.1
-uvicorn==0.23.2
-python-multipart
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+
+# Authentication dependencies
+sqlalchemy==2.0.23
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+email-validator==2.1.0
+python-dotenv==1.0.0
+
+# OAuth dependencies
+authlib==1.2.1
+httpx==0.26.0
 
 # Machine learning dependencies
 torch==2.0.1
@@ -18,4 +29,4 @@ numpy==1.24.3
 
 # UI dependencies
 gradio==4.29.0
-gradio_imageslider
+gradio_imageslider 

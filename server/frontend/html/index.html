@@ -3,14 +3,60 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-    <script type="module" src="/assets/main.js"></script>
-    <link rel="stylesheet" href="/assets/styles.css">
+    <title>ENEOPI - Blast Segmentation</title>
+    <script type="module" src="/frontend/js/main.js"></script>
+    <link rel="stylesheet" href="/frontend/css/styles.css">
+    <style>
+      /* User info styles */
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .user-info {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        color: #333;
+      }
+      
+      .user-welcome {
+        font-size: 0.9rem;
+        color: #666;
+      }
+      
+      .logout-btn {
+        background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+      }
+      
+      .logout-btn:hover {
+        background: linear-gradient(45deg, #ff5252, #e53935);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+      }
+      
+      .logout-btn:active {
+        transform: translateY(0);
+      }
+    </style>
   </head>
   <body>
     <div class="header-background">
       <header class="header">
         <h1 class="title">ENEOPI - Blast Segmentation</h1>
+        <div class="user-info">
+          <span class="user-welcome" id="userWelcome">Welcome, User!</span>
+          <button class="logout-btn" id="logoutBtn">Logout</button>
+        </div>
       </header>
     </div>
     <div class="container">
@@ -139,5 +185,48 @@
         </div>
       </form>
     </div>
+    
+    <script src="/frontend/js/auth.js"></script>
+    <script>
+      // Initialize authentication for main app
+      document.addEventListener('DOMContentLoaded', function() {
+        console.log('🏠 Main application page loaded');
+        const authManager = new AuthManager();
+        const userWelcome = document.getElementById('userWelcome');
+        const logoutBtn = document.getElementById('logoutBtn');
+        
+        // Simple authentication check
+        const token = localStorage.getItem('authToken');
+        
+        if (!token) {
+          console.log('❌ No authentication token, redirecting to login');
+          window.location.href = '/frontend/html/login.html';
+          return;
+        }
+        
+        // Load user data and update UI
+        authManager.loadUserData().then(() => {
+          const user = authManager.getCurrentUser();
+          if (user) {
+            console.log('✅ User authenticated:', user.username);
+            userWelcome.textContent = `Welcome, ${user.username}!`;
+          } else {
+            console.log('❌ Invalid token, redirecting to login');
+            localStorage.removeItem('authToken');
+            window.location.href = '/frontend/html/login.html';
+          }
+        }).catch(() => {
+          console.log('❌ Authentication failed, redirecting to login');
+          localStorage.removeItem('authToken');
+          window.location.href = '/frontend/html/login.html';
+        });
+        
+        // Logout functionality
+        logoutBtn.addEventListener('click', async () => {
+          console.log('🚪 Logging out');
+          await authManager.logout();
+        });
+      });
+    </script>
   </body>
 </html>
