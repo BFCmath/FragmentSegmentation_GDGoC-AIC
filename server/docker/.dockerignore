@@ -14,6 +14,28 @@ env/
 .git/
 .gitignore
 
+# Logs
 api.log
+*.log
 
+# Docker files (since we're building from parent context)
+docker/
+
+# Weights directory (will be mounted as volume)
 weights/
+
+# Development files
+.env.local
+.env.development
+*.tmp
+*.temp
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

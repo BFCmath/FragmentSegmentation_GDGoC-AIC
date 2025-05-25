@@ -159,12 +159,43 @@ mkdir -p server/weights
 - Model weights in `server/weights/`
 - Environment file configured
 
-**Deploy:**
+**Step-by-step deployment:**
 
-```bash
-cd server/docker
-docker-compose up -d --build
-```
+1. **Ensure model weights are in place:**
+
+   ```bash
+   # Create weights directory if it doesn't exist
+   mkdir -p server/weights
+   
+   # Verify required files exist
+   ls server/weights/
+   # Should show: yolo_rgb_nano.onnx, yolo_rgbd_nano.onnx, depth_anything_v2_vits.pth
+   ```
+
+2. **Configure environment:**
+
+   ```bash
+   cd server
+   cp .env_example .env
+   # Edit .env file with your settings
+   ```
+
+3. **Deploy with Docker:**
+
+   ```bash
+   cd server/docker
+   docker-compose up -d --build
+   ```
+
+4. **Verify deployment:**
+
+   ```bash
+   # Check container status
+   docker-compose ps
+   
+   # View logs
+   docker-compose logs -f web
+   ```
 
 **Access Application:**
 - URL: [http://localhost:3000](http://localhost:3000)

@@ -6,14 +6,15 @@ ENV PYTHONUNBUFFERED 1
 
 WORKDIR /app
 
-COPY requirements.txt .
+# Copy requirements.txt from parent directory
+COPY ../requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt -q
 
-COPY . .
+# Copy all server files from parent directory
+COPY .. .
 
-RUN mkdir -p weights
-
+# Set environment for container
 ENV LOG_TO_STDOUT=1
 
 EXPOSE 3000

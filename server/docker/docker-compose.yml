@@ -2,14 +2,18 @@ version: '3.8'
 
 services:
   web:
-    build: .
+    build:
+      context: ..  # Build context is the parent directory (server/)
+      dockerfile: docker/Dockerfile  # Dockerfile location relative to context
     ports:
       - "3000:3000"
+    env_file:
+      - ../.env  # Load environment variables from .env file in server directory
     environment:
       - PORT=3000
       - LOG_TO_STDOUT=true
       - LOG_LEVEL=INFO
       - DEV=false
     volumes:
-      - ./weights:/app/weights
+      - ../weights:/app/weights  # Mount weights from parent directory
     restart: unless-stopped 
